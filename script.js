@@ -549,37 +549,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         
           async function fetchMarketData(symbol, interval, limit) {
             try {
-              // Convert symbol to OKX format (BTCUSDT → BTC-USDT)
-              const okxSymbol = symbol.replace(/([A-Z]+)(USDT)/, '$1-$2');
+              // Use our Netlify function instead of a CORS proxy
+              const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=${limit}`;
               
-              // Define interval mapping
-              const intervalMap = {
-                '1m': '1m',
-                '5m': '5m',
-                '15m': '15m',
-                '1h': '1H',
-                '2h': '2H',
-                '4h': '4H',
-                '1d': '1D'
-              };
+              console.log("Fetching from function:", apiUrl);
               
-              // Get the OKX interval format
-              const okxInterval = intervalMap[interval] || '1H';
-              
-              // Try a different CORS proxy
-              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
-              const proxyUrl = 'https://api.allorigins.win/get?url=';
-              const finalUrl = proxyUrl + encodeURIComponent(apiUrl);
-              
-              console.log("Fetching from URL:", finalUrl);
-              
-              const response = await fetch(finalUrl);
+              const response = await fetch(apiUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
               
-              const responseData = await response.json();
-              
-              // This proxy returns data in a different format, so we need to parse it
-              const data = JSON.parse(responseData.contents);
+              const data = await response.json();
               
               if (data.code !== "0") {
                 throw new Error(`OKX API: ${data.msg || 'Unknown error'}`);
@@ -605,6 +583,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               throw new Error(`Failed to fetch OKX data: ${error.message}`);
             }
           }
+          
           
           
           

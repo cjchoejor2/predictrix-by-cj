@@ -2,6 +2,17 @@
   "dependencies": {
     "chart.js": "^4.4.8",
     "chartjs-adapter-date-fns": "^3.0.0",
-    "date-fns": "^4.1.0"
-  }
+    "date-fns": "^4.1.0",
+    "node-fetch": "^3.3.2"
+  },
+  "name": "okx-predictor",
+  "version": "1.0.0",
+  "main": "chart.min.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }
