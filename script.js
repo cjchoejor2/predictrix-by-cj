@@ -552,7 +552,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               // Convert symbol to OKX format (BTCUSDT → BTC-USDT)
               const okxSymbol = symbol.replace(/([A-Z]+)(USDT)/, '$1-$2');
               
-              // Rest of the function remains the same...
+              // Define interval mapping
               const intervalMap = {
                 '1m': '1m',
                 '5m': '5m',
@@ -563,13 +563,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 '1d': '1D'
               };
               
-              // Define the API URL properly
+              // Get the OKX interval format
+              const okxInterval = intervalMap[interval] || '1H';
+              
+              // Construct the API URL
               const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
-                  
+              
               // Use a CORS proxy
               const corsProxyUrl = 'https://corsproxy.io/?';
               const finalUrl = corsProxyUrl + encodeURIComponent(apiUrl);
-
+              
+              console.log("Fetching from URL:", finalUrl); // Debugging log
               
               const response = await fetch(finalUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -596,9 +600,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 parseFloat(item[7])   // quote volume
               ]).reverse();           // OKX returns newest first
             } catch (error) {
+              console.error("Fetch error details:", error); // Debugging log
               throw new Error(`Failed to fetch OKX data: ${error.message}`);
             }
           }
+          
         
           function calculateIndicators(data) {
             const closes = data.closes;
