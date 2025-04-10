@@ -564,7 +564,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               };
               
               const okxInterval = intervalMap[interval] || '1H';
-              const url = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
+              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
               
               // Add CORS proxy for website version
               const corsProxyUrl = 'https://corsproxy.io/?';
