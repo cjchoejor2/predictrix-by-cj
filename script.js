@@ -563,12 +563,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 '1d': '1D'
               };
               
-              const okxInterval = intervalMap[interval] || '1H';
+              // Define the API URL properly
               const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
-              
-              // Add CORS proxy for website version
+                  
+              // Use a CORS proxy
               const corsProxyUrl = 'https://corsproxy.io/?';
               const finalUrl = corsProxyUrl + encodeURIComponent(apiUrl);
+
               
               const response = await fetch(finalUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
