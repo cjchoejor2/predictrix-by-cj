@@ -567,8 +567,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               const url = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
               
               // Add CORS proxy for website version
-              const corsProxyUrl = 'https://cors-anywhere.herokuapp.com/';
-              const finalUrl = corsProxyUrl + url;
+              const corsProxyUrl = 'https://corsproxy.io/?';
+              const finalUrl = corsProxyUrl + encodeURIComponent(apiUrl);
               
               const response = await fetch(finalUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
