@@ -552,8 +552,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               // Convert symbol to OKX format (BTCUSDT → BTC-USDT)
               const okxSymbol = symbol.replace(/([A-Z]+)(USDT)/, '$1-$2');
               
-              // Define interval mapping directly in this function scope
-              const intervalMapping = {
+              // Define interval mapping
+              const intervalMap = {
                 '1m': '1m',
                 '5m': '5m',
                 '15m': '15m',
@@ -564,19 +564,22 @@ document.addEventListener('DOMContentLoaded', async () => {
               };
               
               // Get the OKX interval format
-              const mappedInterval = intervalMapping[interval] || '1H';
+              const okxInterval = intervalMap[interval] || '1H';
               
-              // Use a different CORS proxy
-              const proxyUrl = 'https://api.allorigins.win/raw?url=';
-              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${mappedInterval}&limit=${limit}`;
-              const fullUrl = proxyUrl + encodeURIComponent(apiUrl);
+              // Try a different CORS proxy
+              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
+              const proxyUrl = 'https://api.allorigins.win/get?url=';
+              const finalUrl = proxyUrl + encodeURIComponent(apiUrl);
               
-              console.log("Fetching from:", fullUrl);
+              console.log("Fetching from URL:", finalUrl);
               
-              const response = await fetch(fullUrl);
+              const response = await fetch(finalUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
               
-              const data = await response.json();
+              const responseData = await response.json();
+              
+              // This proxy returns data in a different format, so we need to parse it
+              const data = JSON.parse(responseData.contents);
               
               if (data.code !== "0") {
                 throw new Error(`OKX API: ${data.msg || 'Unknown error'}`);
@@ -602,6 +605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               throw new Error(`Failed to fetch OKX data: ${error.message}`);
             }
           }
+          
           
           
         
