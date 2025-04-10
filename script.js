@@ -552,8 +552,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               // Convert symbol to OKX format (BTCUSDT → BTC-USDT)
               const okxSymbol = symbol.replace(/([A-Z]+)(USDT)/, '$1-$2');
               
-              // Define interval mapping
-              const intervalMap = {
+              // Define interval mapping directly in this function scope
+              const intervalMapping = {
                 '1m': '1m',
                 '5m': '5m',
                 '15m': '15m',
@@ -564,18 +564,16 @@ document.addEventListener('DOMContentLoaded', async () => {
               };
               
               // Get the OKX interval format
-              const okxInterval = intervalMap[interval] || '1H';
+              const mappedInterval = intervalMapping[interval] || '1H';
               
-              // Construct the API URL
-              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${okxInterval}&limit=${limit}`;
+              // Use a different CORS proxy
+              const proxyUrl = 'https://api.allorigins.win/raw?url=';
+              const apiUrl = `https://www.okx.com/api/v5/market/candles?instId=${okxSymbol}&bar=${mappedInterval}&limit=${limit}`;
+              const fullUrl = proxyUrl + encodeURIComponent(apiUrl);
               
-              // Use a CORS proxy
-              const corsProxyUrl = 'https://corsproxy.io/?';
-              const finalUrl = corsProxyUrl + encodeURIComponent(apiUrl);
+              console.log("Fetching from:", fullUrl);
               
-              console.log("Fetching from URL:", finalUrl); // Debugging log
-              
-              const response = await fetch(finalUrl);
+              const response = await fetch(fullUrl);
               if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
               
               const data = await response.json();
@@ -600,10 +598,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 parseFloat(item[7])   // quote volume
               ]).reverse();           // OKX returns newest first
             } catch (error) {
-              console.error("Fetch error details:", error); // Debugging log
+              console.error("Fetch error details:", error);
               throw new Error(`Failed to fetch OKX data: ${error.message}`);
             }
           }
+          
           
         
           function calculateIndicators(data) {
