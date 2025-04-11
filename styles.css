@@ -63,6 +63,12 @@ body {
   color: var(--text-primary);
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
 .last-updated {
   font-size: 11px;
   color: var(--text-secondary);
@@ -83,6 +89,30 @@ body {
 .full-page-btn:hover {
   background-color: var(--primary-light);
   transform: translateY(-1px);
+}
+
+.train-model-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.train-model-btn:hover {
+  background-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.train-model-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Multi-column container */
@@ -379,7 +409,6 @@ body {
   overflow: hidden;
   width: 350px;
 }
-
 .prediction-card.bullish { border-left: 3px solid var(--success); }
 .prediction-card.neutral { border-left: 3px solid var(--warning); }
 .prediction-card.bearish { border-left: 3px solid var(--danger); }
@@ -680,4 +709,90 @@ body.full-screen-active .chart-container {
   0% { transform: scale(1); }
   50% { transform: scale(1.1); }
   100% { transform: scale(1); }
+}
+
+/* Training status styles */
+.training-status {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 15px;
+  box-shadow: var(--box-shadow);
+  z-index: 1000;
+  max-width: 300px;
+  width: 100%;
+}
+
+.training-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progress-bar {
+  height: 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.training-complete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.training-complete button {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.training-complete button:hover {
+  background-color: var(--primary-light);
+}
+
+/* Model update notification */
+.model-update-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 15px;
+  box-shadow: var(--box-shadow);
+  z-index: 1000;
+  max-width: 300px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.model-update-notification button {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-end;
+}
+
+.model-update-notification button:hover {
+  background-color: var(--primary-light);
 }
