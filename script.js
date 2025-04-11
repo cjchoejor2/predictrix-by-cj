@@ -48,6 +48,256 @@ async function loadModel() {
   }
 }
 
+// Function to collect historical data for model training
+async function collectTrainingData(symbol, intervals = ['15m', '1h', '4h'], dataPoints = 1000) {
+  try {
+    console.log("Collecting training data...");
+    const trainingData = [];
+    const labels = [];
+    
+    for (const interval of intervals) {
+      console.log(`Fetching ${interval} data for ${symbol}...`);
+      
+      // Fetch historical data
+      const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=${dataPoints}`;
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      
+      const data = await response.json();
+      
+      if (data.code !== "0" || !data.data || data.data.length === 0) {
+        console.warn(`No data available for ${symbol} at ${interval} timeframe`);
+        continue;
+      }
+      
+      // Process the data
+      const candles = data.data.map(item => [
+        parseInt(item[0]),     // timestamp
+        parseFloat(item[1]),   // open
+        parseFloat(item[2]),   // high
+        parseFloat(item[3]),   // low
+        parseFloat(item[4]),   // close
+        parseFloat(item[5]),   // volume
+        item[6],               // volume currency
+        parseFloat(item[7])    // quote volume
+      ]).reverse();            // OKX returns newest first
+      
+      const cryptoData = new CryptoData(candles);
+      
+      // Calculate features and labels for each data point
+      // We'll use a sliding window approach
+      for (let i = 30; i < candles.length - 10; i++) {
+        // Calculate indicators for current window
+        const windowData = new CryptoData(candles.slice(0, i + 1));
+        const indicators = calculateIndicators(windowData);
+        
+        // Create feature vector
+        const features = [
+          indicators.ema5 / indicators.ema20,                  // EMA ratio
+          indicators.rsi6 / 100,                               // Normalized RSI
+          indicators.macd.histogram,                           // MACD histogram
+          (indicators.currentPrice - indicators.bollingerBands.lower) / 
+          (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
+          indicators.volume / indicators.avgVolume             // Volume ratio
+        ];
+        
+        // Determine outcome (label) based on future price movement
+        // Look 10 candles ahead to determine if price went up or down
+        const futurePriceChange = (candles[i + 10][4] - candles[i][4]) / candles[i][4] * 100;
+        
+        let label;
+        if (futurePriceChange > 1.0) {
+          label = [1, 0, 0]; // Bullish
+        } else if (futurePriceChange < -1.0) {
+          label = [0, 0, 1]; // Bearish
+        } else {
+          label = [0, 1, 0]; // Neutral
+        }
+        
+        trainingData.push(features);
+        labels.push(label);
+      }
+      
+      console.log(`Processed ${interval} data: ${trainingData.length} training samples`);
+    }
+    
+    return { features: trainingData, labels: labels };
+  } catch (error) {
+    console.error("Error collecting training data:", error);
+    return { features: [], labels: [] };
+  }
+}
+
+// Function to train the TensorFlow model
+async function trainModel(trainingData, epochs = 50, batchSize = 32) {
+  try {
+    if (!trainingData.features.length || !trainingData.labels.length) {
+      throw new Error("No training data available");
+    }
+    
+    console.log(`Training model with ${trainingData.features.length} samples...`);
+    
+    // Create a new model or reset existing one
+    const model = tf.sequential();
+    model.add(tf.layers.dense({
+      units: 16,                // Increased units for better learning capacity
+      activation: 'relu',
+      inputShape: [5]           // 5 features
+    }));
+    
+    model.add(tf.layers.dropout(0.2)); // Add dropout to prevent overfitting
+    
+    model.add(tf.layers.dense({
+      units: 8,
+      activation: 'relu'
+    }));
+    
+    model.add(tf.layers.dense({
+      units: 3,                 // 3 outputs: bullish, neutral, bearish
+      activation: 'softmax'
+    }));
+    
+    model.compile({
+      optimizer: 'adam',
+      loss: 'categoricalCrossentropy',
+      metrics: ['accuracy']
+    });
+    
+    // Convert data to tensors
+    const xs = tf.tensor2d(trainingData.features);
+    const ys = tf.tensor2d(trainingData.labels);
+    
+    // Split data into training and validation sets (80/20 split)
+    const splitIdx = Math.floor(trainingData.features.length * 0.8);
+    
+    const trainXs = xs.slice([0, 0], [splitIdx, 5]);
+    const trainYs = ys.slice([0, 0], [splitIdx, 3]);
+    
+    const valXs = xs.slice([splitIdx, 0], [trainingData.features.length - splitIdx, 5]);
+    const valYs = ys.slice([splitIdx, 0], [trainingData.features.length - splitIdx, 3]);
+    
+    // Create status display element
+    let statusEl = document.getElementById('modelTrainingStatus');
+    if (!statusEl) {
+      statusEl = document.createElement('div');
+      statusEl.id = 'modelTrainingStatus';
+      statusEl.className = 'training-status';
+      document.body.appendChild(statusEl);
+    }
+    
+    // Train the model
+    await model.fit(trainXs, trainYs, {
+      epochs: epochs,
+      batchSize: batchSize,
+      validationData: [valXs, valYs],
+      callbacks: {
+        onEpochEnd: (epoch, logs) => {
+          const progress = Math.round((epoch + 1) / epochs * 100);
+          statusEl.innerHTML = `
+            <div class="training-progress">
+              <div>Training model: ${progress}% complete</div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progress}%"></div>
+              </div>
+              <div>Accuracy: ${(logs.acc * 100).toFixed(2)}% | Loss: ${logs.loss.toFixed(4)}</div>
+            </div>
+          `;
+          console.log(`Epoch ${epoch + 1}: accuracy = ${logs.acc}, loss = ${logs.loss}`);
+        }
+      }
+    });
+    
+    // Clean up tensors
+    xs.dispose();
+    ys.dispose();
+    trainXs.dispose();
+    trainYs.dispose();
+    valXs.dispose();
+    valYs.dispose();
+    
+    // Update status
+    statusEl.innerHTML = `
+      <div class="training-complete">
+        <div>Model training complete!</div>
+        <div>Final accuracy: ${(model.history.history.acc[epochs-1] * 100).toFixed(2)}%</div>
+        <button id="closeTrainingStatus">Close</button>
+      </div>
+    `;
+    
+    document.getElementById('closeTrainingStatus').addEventListener('click', () => {
+      statusEl.remove();
+    });
+    
+    console.log("Model training complete!");
+    return model;
+  } catch (error) {
+    console.error("Error training model:", error);
+    return null;
+  }
+}
+
+// Function to save the trained model to localStorage
+async function saveModel(model) {
+  try {
+    const saveResults = await model.save('localstorage://crypto-predictor-model');
+    console.log('Model saved to localStorage:', saveResults);
+    
+    // Save training timestamp
+    localStorage.setItem('model-last-trained', Date.now().toString());
+    return true;
+  } catch (error) {
+    console.error('Error saving model:', error);
+    return false;
+  }
+}
+
+// Function to load a saved model from localStorage
+async function loadSavedModel() {
+  try {
+    const model = await tf.loadLayersModel('localstorage://crypto-predictor-model');
+    console.log('Model loaded from localStorage');
+    
+    // Check when model was last trained
+    const lastTrained = localStorage.getItem('model-last-trained');
+    if (lastTrained) {
+      const daysSinceTraining = (Date.now() - parseInt(lastTrained)) / (1000 * 60 * 60 * 24);
+      console.log(`Model was trained ${daysSinceTraining.toFixed(1)} days ago`);
+    }
+    
+    return model;
+  } catch (error) {
+    console.log('No saved model found or error loading model:', error);
+    return null;
+  }
+}
+
+// Function to check if model needs updating (older than 7 days)
+function modelNeedsUpdate() {
+  const lastTrained = localStorage.getItem('model-last-trained');
+  if (!lastTrained) return true;
+  
+  const daysSinceTraining = (Date.now() - parseInt(lastTrained)) / (1000 * 60 * 60 * 24);
+  return daysSinceTraining > 7; // Update weekly
+}
+
+// Add a notification if model needs update
+function checkModelStatus() {
+  if (modelNeedsUpdate()) {
+    const notification = document.createElement('div');
+    notification.className = 'model-update-notification';
+    notification.innerHTML = `
+      <div>Your prediction model is outdated. Consider retraining for better accuracy.</div>
+      <button id="dismissModelNotification">Dismiss</button>
+    `;
+    document.body.appendChild(notification);
+    
+    document.getElementById('dismissModelNotification').addEventListener('click', () => {
+      notification.remove();
+    });
+  }
+}
+
 class CryptoData {
   constructor(data) {
     this.data = data;
@@ -319,7 +569,7 @@ function generateDetailedAnalysis(indicators, timeframe) {
     <div class="analysis-section">
       <h4>📌 Fibonacci Levels</h4>
       <p>Fib 0.786 (${fib786}) → Closest Fib level, possible bounce area</p>
-                  <p>Fib 0.618 (${fib618}) → Stronger resistance, price might reverse down</p>
+            <p>Fib 0.618 (${fib618}) → Stronger resistance, price might reverse down</p>
       <p>Fib 0.382 (${fib382}) → Key retracement level; potential reversal zone</p>
       <p>Fib 0.236 (${fib236}) → Deep retracement; last defense before major drop</p>
     </div>
@@ -380,8 +630,16 @@ function showAnalysisPopup(content) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load TensorFlow model
-  predictionModel = await loadModel();
+  // Try to load saved model first
+  predictionModel = await loadSavedModel();
+  
+  // If no saved model, initialize a new one
+  if (!predictionModel) {
+    predictionModel = await loadModel();
+  }
+  
+  // Check if model needs update
+  checkModelStatus();
 
   // Initialize sync toggles
   const syncToggles = document.querySelectorAll('[id^="syncToggle"]');
@@ -409,6 +667,74 @@ document.addEventListener('DOMContentLoaded', async () => {
   const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
   if (toggleFullscreenBtn) {
     toggleFullscreenBtn.addEventListener('click', toggleFullscreen);
+  }
+  
+  // Add train model button
+  const controlsContainer = document.querySelector('.controls-container');
+  if (controlsContainer) {
+    const trainModelBtn = document.createElement('button');
+    trainModelBtn.id = 'trainModelBtn';
+    trainModelBtn.className = 'action-button';
+    trainModelBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+            Train Model
+    `;
+    controlsContainer.appendChild(trainModelBtn);
+    
+    trainModelBtn.addEventListener('click', async () => {
+      trainModelBtn.disabled = true;
+      trainModelBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="animate-spin">
+          <path d="M12 2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M12 18V22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M4.93 4.93L7.76 7.76" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M16.24 16.24L19.07 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M2 12H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M18 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M4.93 19.07L7.76 16.24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M16.24 7.76L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg> Training...
+      `;
+      
+      try {
+        // Get symbol from first panel
+        const symbol = document.getElementById('symbol').value || 'BTCUSDT';
+        
+        // Collect training data
+        const trainingData = await collectTrainingData(symbol);
+        
+        // Train model
+        const trainedModel = await trainModel(trainingData);
+        
+        if (trainedModel) {
+          // Save model
+          await saveModel(trainedModel);
+          
+          // Update global model
+          predictionModel = trainedModel;
+          
+          // Show success message
+          alert('Model trained and saved successfully!');
+        }
+      } catch (error) {
+        console.error('Training process failed:', error);
+        alert('Training failed: ' + error.message);
+      } finally {
+        trainModelBtn.disabled = false;
+        trainModelBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Train Model
+        `;
+      }
+    });
   }
   
   // Initialize
@@ -691,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     <div class="indicator-row">
       <span class="ema5">EMA5: ${indicators.ema5?.toFixed(4) || 'N/A'}</span>
       <span class="ema10">EMA10: ${indicators.ema10?.toFixed(4) || 'N/A'}</span>
-      <span class="ema20">EMA20: ${indicators.ema20?.toFixed(4) || 'N/A'}</span>
+            <span class="ema20">EMA20: ${indicators.ema20?.toFixed(4) || 'N/A'}</span>
     </div>
     <div class="indicator-row">
       <span class="ma5">MA5: ${indicators.ma5?.toFixed(4) || 'N/A'}</span>
@@ -734,14 +1060,14 @@ function calculateProbabilities(indicators) {
   // Try to use TensorFlow model if available
   if (predictionModel) {
     try {
-      // Prepare more comprehensive input data for the model
+      // Prepare input data for the model
       const inputData = [
-        indicators.ema5 / indicators.ema20,  // EMA ratio
-        indicators.rsi6 / 100,               // Short-term RSI
-        indicators.rsi24 / 100,              // Longer-term RSI
-        indicators.macd.histogram,           // MACD histogram
+        indicators.ema5 / indicators.ema20, // EMA ratio
+        indicators.rsi6 / 100, // Normalized RSI
+        indicators.macd.histogram, // MACD histogram
         (indicators.currentPrice - indicators.bollingerBands.lower) / 
-        (indicators.bollingerBands.upper - indicators.bollingerBands.lower) // BB position
+        (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
+        indicators.volume / indicators.avgVolume // Volume ratio
       ];
       
       // Make prediction
@@ -753,11 +1079,11 @@ function calculateProbabilities(indicators) {
       tensorInput.dispose();
       prediction.dispose();
       
-      // Return probabilities with some smoothing to prevent extreme values
+      // Return probabilities
       return {
-        bullish: Math.min(95, Math.max(5, probabilities[0] * 100)),
-        neutral: Math.min(95, Math.max(5, probabilities[1] * 100)),
-        bearish: Math.min(95, Math.max(5, probabilities[2] * 100))
+        bullish: probabilities[0] * 100,
+        neutral: probabilities[1] * 100,
+        bearish: probabilities[2] * 100
       };
     } catch (error) {
       console.error('TensorFlow prediction failed:', error);
@@ -771,81 +1097,26 @@ function calculateProbabilities(indicators) {
 }
 
 function calculateTraditionalProbabilities(indicators) {
-  // Use more factors for a more accurate prediction
-  const weights = { 
-    trend: 0.25,         // EMA trends
-    momentum: 0.20,      // RSI
-    macd: 0.15,          // MACD
-    bollingerBands: 0.15, // Bollinger Bands position
-    volume: 0.15,        // Volume analysis
-    support: 0.10        // Support/Resistance proximity
-  };
+  const weights = { trend: 0.4, momentum: 0.3, volume: 0.3 };
+  const trendScore = indicators.ema5 > indicators.ema10 ? 1 : 0;
+  const momentumScore = indicators.rsi6 > 50 ? 
+    Math.min(1, (indicators.rsi6 - 50) / 30) : 
+    Math.max(0, 1 - (50 - indicators.rsi6) / 30);
+  const volumeScore = indicators.volume > indicators.avgVolume * 1.2 ? 
+    Math.min(1, (indicators.volume / indicators.avgVolume - 1) / 2) : 0;
   
-  // Trend analysis (EMA relationships)
-  const trendScore = indicators.ema5 > indicators.ema10 && indicators.ema10 > indicators.ema20 ? 1 : 
-                    (indicators.ema5 < indicators.ema10 && indicators.ema10 < indicators.ema20 ? 0 : 0.5);
+  const bullishScore = trendScore * weights.trend + momentumScore * weights.momentum + volumeScore * weights.volume;
+  const bearishScore = (1 - trendScore) * weights.trend + (1 - momentumScore) * weights.momentum + 
+    (indicators.volume < indicators.avgVolume * 0.8 ? weights.volume * 0.5 : 0);
   
-  // Momentum analysis (RSI)
-  let momentumScore;
-  if (indicators.rsi6 > 70) momentumScore = 0.8; // Overbought but still bullish
-  else if (indicators.rsi6 < 30) momentumScore = 0.2; // Oversold but still bearish
-  else momentumScore = (indicators.rsi6 - 30) / 40; // Linear scale between 30-70
-  
-  // MACD analysis
-  const macdScore = indicators.macd.value > indicators.macd.signal ? 
-    Math.min(1, 0.5 + indicators.macd.histogram / 0.01) : // Positive histogram
-    Math.max(0, 0.5 - Math.abs(indicators.macd.histogram) / 0.01); // Negative histogram
-  
-  // Bollinger Bands position
-  let bbScore;
-  if (indicators.currentPrice > indicators.bollingerBands.upper) bbScore = 0.8; // Above upper band
-  else if (indicators.currentPrice < indicators.bollingerBands.lower) bbScore = 0.2; // Below lower band
-  else {
-    // Position within bands (0 = lower band, 1 = upper band)
-    bbScore = (indicators.currentPrice - indicators.bollingerBands.lower) / 
-              (indicators.bollingerBands.upper - indicators.bollingerBands.lower);
-  }
-  
-  // Volume analysis
-  const volumeRatio = indicators.volume / indicators.avgVolume;
-  const volumeScore = volumeRatio > 1.5 ? 
-    Math.min(1, 0.5 + (volumeRatio - 1) / 2) : // High volume
-    (volumeRatio > 0.5 ? 0.5 : Math.max(0, volumeRatio)); // Low volume
-  
-  // Support/Resistance proximity
-  const priceRange = indicators.resistanceLevel - indicators.supportLevel;
-  const pricePosition = (indicators.currentPrice - indicators.supportLevel) / priceRange;
-  const supportScore = pricePosition; // Higher = closer to resistance = more bullish
-  
-  // Calculate weighted scores
-  const bullishScore = 
-    trendScore * weights.trend + 
-    momentumScore * weights.momentum + 
-    macdScore * weights.macd +
-    bbScore * weights.bollingerBands +
-    volumeScore * weights.volume +
-    supportScore * weights.support;
-  
-  const bearishScore = 
-    (1 - trendScore) * weights.trend + 
-    (1 - momentumScore) * weights.momentum + 
-    (1 - macdScore) * weights.macd +
-    (1 - bbScore) * weights.bollingerBands +
-    (1 - volumeScore) * weights.volume +
-    (1 - supportScore) * weights.support;
-  
-  // Calculate neutral score based on how close bullish and bearish scores are
-  const scoreDifference = Math.abs(bullishScore - bearishScore);
-  const neutralScore = Math.max(0, 0.5 - scoreDifference);
-  
-  // Normalize to ensure they sum to 1
-  const total = bullishScore + bearishScore + neutralScore;
-  const normalizer = 1 / total;
+  const total = bullishScore + bearishScore;
+  const neutralScore = total < 0.8 ? (0.8 - total) : 0;
+  const scale = 1 / (bullishScore + bearishScore + neutralScore);
   
   return {
-    bullish: bullishScore * normalizer * 100,
-    bearish: bearishScore * normalizer * 100,
-    neutral: neutralScore * normalizer * 100
+    bullish: bullishScore * scale * 100,
+    bearish: bearishScore * scale * 100,
+    neutral: neutralScore * scale * 100
   };
 }
 
@@ -861,54 +1132,6 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     return;
   }
   
-  // Calculate a comprehensive market score based on technical indicators
-  const emaAlignment = indicators.ema5 > indicators.ema10 && indicators.ema10 > indicators.ema20;
-  const rsiStrength = indicators.rsi6 > 50 ? (indicators.rsi6 - 50) / 50 : (50 - indicators.rsi6) / 50 * -1;
-  const macdSignal = indicators.macd.value > indicators.macd.signal ? 1 : -1;
-  const bbPosition = (indicators.currentPrice - indicators.bollingerBands.lower) / 
-                    (indicators.bollingerBands.upper - indicators.bollingerBands.lower) - 0.5;
-  const volumeStrength = (indicators.volume / indicators.avgVolume - 1) * 0.5;
-  
-  // Weighted market score (-1 to 1 scale)
-  const marketScore = (
-    (emaAlignment ? 0.3 : -0.3) + 
-    (rsiStrength * 0.2) + 
-    (macdSignal * 0.2) + 
-    (bbPosition * 0.15) + 
-    (volumeStrength * 0.15)
-  );
-  
-  // Convert market score to probabilities (ensuring they sum to 100%)
-  let calculatedBullish, calculatedBearish, calculatedNeutral;
-  
-  if (marketScore > 0.3) {
-    // Strong bullish
-    calculatedBullish = 50 + marketScore * 50;
-    calculatedBearish = (100 - calculatedBullish) * 0.3;
-    calculatedNeutral = 100 - calculatedBullish - calculatedBearish;
-  } else if (marketScore < -0.3) {
-    // Strong bearish
-    calculatedBearish = 50 + Math.abs(marketScore) * 50;
-    calculatedBullish = (100 - calculatedBearish) * 0.3;
-    calculatedNeutral = 100 - calculatedBullish - calculatedBearish;
-  } else {
-    // Neutral with slight bias
-    calculatedNeutral = 50 - Math.abs(marketScore) * 50;
-    if (marketScore > 0) {
-      calculatedBullish = (100 - calculatedNeutral) * 0.7;
-      calculatedBearish = 100 - calculatedNeutral - calculatedBullish;
-    } else {
-      calculatedBearish = (100 - calculatedNeutral) * 0.7;
-      calculatedBullish = 100 - calculatedNeutral - calculatedBearish;
-    }
-  }
-  
-  // Update the probability values
-  probabilities.bullish = calculatedBullish;
-  probabilities.bearish = calculatedBearish;
-  probabilities.neutral = calculatedNeutral;
-  
-  // Update the displayed probabilities
   bullishProbEl.textContent = `${probabilities.bullish.toFixed(1)}%`;
   bearishProbEl.textContent = `${probabilities.bearish.toFixed(1)}%`;
   neutralProbEl.textContent = `${probabilities.neutral.toFixed(1)}%`;
@@ -920,28 +1143,12 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     el.style.width = `${probabilities[type]}%`;
   });
   
-  // Calculate price change percentage
-  const priceChangePercent = ((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100);
-  
-  // Determine prediction based on market score
   let prediction, predictionClass;
-  
-  if (marketScore > 0.5) {
-    prediction = "Strong Bullish Trend";
-    predictionClass = "bullish";
-  } else if (marketScore > 0.2) {
-    prediction = "Bullish Bias";
-    predictionClass = "bullish";
-  } else if (marketScore < -0.5) {
-    prediction = "Strong Bearish Trend";
-    predictionClass = "bearish";
-  } else if (marketScore < -0.2) {
-    prediction = "Bearish Bias";
-    predictionClass = "bearish";
-  } else {
-    prediction = "Neutral Market";
-    predictionClass = "neutral";
-  }
+  if (probabilities.bullish >= 50) prediction = "Strong Bullish Trend", predictionClass = "bullish";
+  else if (probabilities.bearish >= 50) prediction = "Strong Bearish Trend", predictionClass = "bearish";
+  else if (probabilities.bullish > probabilities.bearish) prediction = "Mild Bullish Bias", predictionClass = "bullish";
+  else if (probabilities.bearish > probabilities.bullish) prediction = "Mild Bearish Bias", predictionClass = "bearish";
+  else prediction = "Neutral Market", predictionClass = "neutral";
   
   finalPredictionEl.className = `prediction-card ${predictionClass}`;
   finalPredictionEl.innerHTML = `
@@ -955,7 +1162,7 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     </div>
     <div class="prediction-text">
       <div class="prediction-title">${prediction}</div>
-      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${priceChangePercent > 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)</div>
+      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${(indicators.ema5 > indicators.ema10 ? '+' : '')}${((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100).toFixed(2)}%)</div>
     </div>
     <button class="details-btn">Details</button>
   `;
@@ -968,230 +1175,285 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
   });
 }
 
-
-  function updateChart(suffix, data, indicators) {
-    const chartId = `priceChart${suffix}`;
-    const ctx = document.getElementById(chartId)?.getContext('2d');
-    if (!ctx) {
-      console.error(`Chart canvas not found for panel ${suffix}`);
-      return;
-    }
-    
-    // Destroy existing chart if it exists
-    if (chartInstances[chartId]) {
-      chartInstances[chartId].destroy();
-    }
-    
-    // Create datasets for additional indicators
-    const macdDataset = {
-      label: 'MACD',
-      data: data.closes.map((_, i) => i < 26 ? null : indicators.macd.value),
-      borderColor: '#FF6384',
-      borderWidth: 1,
-      pointRadius: 0,
-      yAxisID: 'y1',
-      hidden: true
-    };
-    
-    const signalDataset = {
-      label: 'Signal',
-      data: data.closes.map((_, i) => i < 26 ? null : indicators.macd.signal),
-      borderColor: '#36A2EB',
-      borderWidth: 1,
-      pointRadius: 0,
-      yAxisID: 'y1',
-      hidden: true
-    };
-    
-    chartInstances[chartId] = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: data.timestamps.map(date => date.toLocaleTimeString()),
-        datasets: [{
-          label: 'Price',
-          data: data.closes,
-          borderColor: '#6C5CE7',
-          borderWidth: 2,
-          tension: 0.1,
-          pointRadius: 0,
-          fill: { target: 'origin', above: 'rgba(108, 92, 231, 0.1)', below: 'rgba(108, 92, 231, 0.1)' }
-        },
-        macdDataset,
-        signalDataset
-        ]
+function updateChart(suffix, data, indicators) {
+  const chartId = `priceChart${suffix}`;
+  const ctx = document.getElementById(chartId)?.getContext('2d');
+  if (!ctx) {
+    console.error(`Chart canvas not found for panel ${suffix}`);
+    return;
+  }
+  
+  // Destroy existing chart if it exists
+  if (chartInstances[chartId]) {
+    chartInstances[chartId].destroy();
+  }
+  
+  // Create datasets for additional indicators
+  const macdDataset = {
+    label: 'MACD',
+    data: data.closes.map((_, i) => i < 26 ? null : indicators.macd.value),
+    borderColor: '#FF6384',
+    borderWidth: 1,
+    pointRadius: 0,
+    yAxisID: 'y1',
+    hidden: true
+  };
+  
+  const signalDataset = {
+    label: 'Signal',
+    data: data.closes.map((_, i) => i < 26 ? null : indicators.macd.signal),
+    borderColor: '#36A2EB',
+    borderWidth: 1,
+    pointRadius: 0,
+    yAxisID: 'y1',
+    hidden: true
+  };
+  
+  chartInstances[chartId] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.timestamps.map(date => date.toLocaleTimeString()),
+      datasets: [{
+        label: 'Price',
+        data: data.closes,
+        borderColor: '#6C5CE7',
+        borderWidth: 2,
+        tension: 0.1,
+        pointRadius: 0,
+        fill: { target: 'origin', above: 'rgba(108, 92, 231, 0.1)', below: 'rgba(108, 92, 231, 0.1)' }
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: '#3A3A4E',
-            titleColor: '#BDC3C7',
-            bodyColor: '#F5F6FA',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            borderWidth: 1,
-            padding: 12,
-            callbacks: { 
-              label: ctx => {
-                if (ctx.dataset.label === 'Price') {
-                  return `Price: ${ctx.parsed.y.toFixed(2)}`;
-                } else if (ctx.dataset.label === 'MACD') {
-                  return `MACD: ${ctx.parsed.y.toFixed(6)}`;
-                } else if (ctx.dataset.label === 'Signal') {
-                  return `Signal: ${ctx.parsed.y.toFixed(6)}`;
-                }
-                return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`;
+      macdDataset,
+      signalDataset
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: '#3A3A4E',
+          titleColor: '#BDC3C7',
+          bodyColor: '#F5F6FA',
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          borderWidth: 1,
+          padding: 12,
+          callbacks: { 
+            label: ctx => {
+              if (ctx.dataset.label === 'Price') {
+                return `Price: ${ctx.parsed.y.toFixed(2)}`;
+              } else if (ctx.dataset.label === 'MACD') {
+                return `MACD: ${ctx.parsed.y.toFixed(6)}`;
+              } else if (ctx.dataset.label === 'Signal') {
+                return `Signal: ${ctx.parsed.y.toFixed(6)}`;
               }
-            }
-          },
-          annotation: {
-            annotations: {
-              supportLine: {
-                type: 'line',
-                yMin: indicators.supportLevel,
-                yMax: indicators.supportLevel,
-                borderColor: 'rgba(0, 184, 148, 0.7)',
-                borderWidth: 1,
-                borderDash: [6, 6],
-                label: { content: 'Support', enabled: true, position: 'left' }
-              },
-              resistanceLine: {
-                type: 'line',
-                yMin: indicators.resistanceLevel,
-                yMax: indicators.resistanceLevel,
-                borderColor: 'rgba(214, 48, 49, 0.7)',
-                borderWidth: 1,
-                borderDash: [6, 6],
-                label: { content: 'Resistance', enabled: true, position: 'right' }
-              },
-              fib236: {
-                type: 'line',
-                yMin: indicators.fibLevels['0.236'],
-                yMax: indicators.fibLevels['0.236'],
-                borderColor: 'rgba(162, 155, 254, 0.5)',
-                borderWidth: 1,
-                label: { content: '0.236', enabled: true }
-              },
-              fib618: {
-                type: 'line',
-                yMin: indicators.fibLevels['0.618'],
-                yMax: indicators.fibLevels['0.618'],
-                borderColor: 'rgba(162, 155, 254, 0.5)',
-                borderWidth: 1,
-                label: { content: '0.618', enabled: true }
-              },
-              bbUpper: {
-                type: 'line',
-                yMin: indicators.bollingerBands.upper,
-                yMax: indicators.bollingerBands.upper,
-                borderColor: 'rgba(255, 99, 132, 0.5)',
-                borderWidth: 1,
-                borderDash: [5, 5],
-                label: { content: 'BB Upper', enabled: false }
-              },
-              bbLower: {
-                type: 'line',
-                yMin: indicators.bollingerBands.lower,
-                yMax: indicators.bollingerBands.lower,
-                borderColor: 'rgba(255, 99, 132, 0.5)',
-                borderWidth: 1,
-                borderDash: [5, 5],
-                label: { content: 'BB Lower', enabled: false }
-              }
+              return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`;
             }
           }
         },
-        scales: {
-          x: { 
-            grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-            ticks: { 
-              color: '#BDC3C7',
-              maxRotation: 0,
-              autoSkip: true,
-              maxTicksLimit: 10 // Limit number of ticks for better readability
-            } 
-          },
-          y: { 
-            grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
-            ticks: { color: '#BDC3C7' },
-            beginAtZero: false // Better auto-scaling
-          },
-          y1: {
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { color: '#FF6384' },
-            display: false
+        annotation: {
+          annotations: {
+            supportLine: {
+              type: 'line',
+              yMin: indicators.supportLevel,
+              yMax: indicators.supportLevel,
+              borderColor: 'rgba(0, 184, 148, 0.7)',
+              borderWidth: 1,
+              borderDash: [6, 6],
+              label: { content: 'Support', enabled: true, position: 'left' }
+            },
+            resistanceLine: {
+              type: 'line',
+              yMin: indicators.resistanceLevel,
+              yMax: indicators.resistanceLevel,
+              borderColor: 'rgba(214, 48, 49, 0.7)',
+              borderWidth: 1,
+              borderDash: [6, 6],
+              label: { content: 'Resistance', enabled: true, position: 'right' }
+            },
+            fib236: {
+              type: 'line',
+              yMin: indicators.fibLevels['0.236'],
+              yMax: indicators.fibLevels['0.236'],
+              borderColor: 'rgba(162, 155, 254, 0.5)',
+              borderWidth: 1,
+              label: { content: '0.236', enabled: true }
+            },
+            fib618: {
+              type: 'line',
+              yMin: indicators.fibLevels['0.618'],
+              yMax: indicators.fibLevels['0.618'],
+              borderColor: 'rgba(162, 155, 254, 0.5)',
+              borderWidth: 1,
+              label: { content: '0.618', enabled: true }
+            },
+            bbUpper: {
+              type: 'line',
+              yMin: indicators.bollingerBands.upper,
+              yMax: indicators.bollingerBands.upper,
+              borderColor: 'rgba(255, 99, 132, 0.5)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              label: { content: 'BB Upper', enabled: false }
+            },
+            bbLower: {
+              type: 'line',
+              yMin: indicators.bollingerBands.lower,
+              yMax: indicators.bollingerBands.lower,
+              borderColor: 'rgba(255, 99, 132, 0.5)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              label: { content: 'BB Lower', enabled: false }
+            }
           }
+        }
+      },
+      scales: {
+        x: { 
+          grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+          ticks: { 
+            color: '#BDC3C7',
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 10 // Limit number of ticks for better readability
+          } 
         },
-        interaction: { mode: 'nearest', axis: 'x', intersect: false }
-      }
-    });
-  }
-
-  function updateLastUpdated() {
-    const lastUpdatedEls = document.querySelectorAll('[id^="lastUpdated"]');
-    lastUpdatedEls.forEach(el => {
-      el.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-    });
-  }
-
-  function showLoadingState(button, isLoading) {
-    if (!button) return;
-    
-    button.innerHTML = isLoading ? 
-      `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="animate-spin">
-        <path d="M12 2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M12 18V22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M4.93 4.93L7.76 7.76" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M16.24 16.24L19.07 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M2 12H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M18 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M4.93 19.07L7.76 16.24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M16.24 7.76L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg> Analyzing...` : 
-      `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
-      <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg> Analyze Market`;
-    button.disabled = isLoading;
-  }
-
-  function showErrorState(predictionEl, message) {
-    if (!predictionEl) return;
-    
-    predictionEl.className = "prediction-card error";
-    predictionEl.innerHTML = `
-      <div class="prediction-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
-          <path d="M8 8L16 16M8 16L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <div class="prediction-text">
-        <div class="prediction-title">Error</div>
-        <div class="prediction-subtitle">${message}</div>
-        ${message.includes('Instrument ID') ? '<div class="prediction-hint">Try BTCUSDT, ETHUSDT, etc.</div>' : ''}
-      </div>
-    `;
-  }
-
-  initFullscreenMode();
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen = !!document.fullscreenElement;
-    document.getElementById('toggleFullscreen').textContent = 
-      isFullscreen ? 'Exit Full Screen' : 'Full Screen';
-    document.body.classList.toggle('full-screen-active', isFullscreen);
+        y: { 
+          grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+          ticks: { color: '#BDC3C7' },
+          beginAtZero: false // Better auto-scaling
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#FF6384' },
+          display: false
+        }
+      },
+      interaction: { mode: 'nearest', axis: 'x', intersect: false }
+    }
   });
+}
 
-  // Auto-analyze all panels on load
-  setTimeout(() => {
-    document.querySelectorAll('[id^="fetchData"]').forEach(btn => {
-      const panelId = btn.id.replace('fetchData', '');
-      analyzeMarket(panelId || '');
+function updateLastUpdated() {
+  const lastUpdatedEls = document.querySelectorAll('[id^="lastUpdated"]');
+  lastUpdatedEls.forEach(el => {
+    el.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+  });
+}
+
+function showLoadingState(button, isLoading) {
+  if (!button) return;
+  
+  button.innerHTML = isLoading ? 
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="animate-spin">
+      <path d="M12 2V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M12 18V22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M4.93 4.93L7.76 7.76" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M16.24 16.24L19.07 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M2 12H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M18 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M4.93 19.07L7.76 16.24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M16.24 7.76L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg> Analyzing...` : 
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
+    <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg> Analyze Market`;
+  button.disabled = isLoading;
+}
+
+function showErrorState(predictionEl, message) {
+  if (!predictionEl) return;
+  
+  predictionEl.className = "prediction-card error";
+  predictionEl.innerHTML = `
+    <div class="prediction-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 8L16 16M8 16L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="prediction-text">
+      <div class="prediction-title">Error</div>
+      <div class="prediction-subtitle">${message}</div>
+      ${message.includes('Instrument ID') ? '<div class="prediction-hint">Try BTCUSDT, ETHUSDT, etc.</div>' : ''}
+    </div>
+  `;
+}
+
+// Function to setup auto-refresh for a panel
+function setupAutoRefresh(panelId = '') {
+  // Clear any existing interval for this panel
+  if (autoRefreshIntervals[panelId]) {
+    clearInterval(autoRefreshIntervals[panelId]);
+    delete autoRefreshIntervals[panelId];
+  }
+  
+  const autoRefreshEl = document.getElementById(`autoRefresh${panelId}`);
+  if (!autoRefreshEl) return;
+  
+  const isEnabled = autoRefreshEl.checked;
+  const intervalEl = document.getElementById(`refreshInterval${panelId}`);
+  const intervalValue = intervalEl ? parseInt(intervalEl.value) : 60;
+  
+  if (isEnabled && intervalValue > 0) {
+    // Set new interval
+    autoRefreshIntervals[panelId] = setInterval(() => {
+      analyzeMarket(panelId);
+    }, intervalValue * 1000);
+    
+    console.log(`Auto-refresh enabled for panel ${panelId || 'main'} every ${intervalValue} seconds`);
+  }
+}
+
+// Initialize auto-refresh toggles
+function initAutoRefresh() {
+  const autoRefreshToggles = document.querySelectorAll('[id^="autoRefresh"]');
+  autoRefreshToggles.forEach(toggle => {
+    const panelId = toggle.id.replace('autoRefresh', '');
+    
+    // Add change listener
+    toggle.addEventListener('change', () => {
+      setupAutoRefresh(panelId);
     });
-  }, 500);
+    
+    // Also listen for interval changes
+    const intervalEl = document.getElementById(`refreshInterval${panelId}`);
+    if (intervalEl) {
+      intervalEl.addEventListener('change', () => {
+        if (toggle.checked) {
+          setupAutoRefresh(panelId);
+        }
+      });
+    }
+    
+    // Setup initial state if enabled
+    if (toggle.checked) {
+      setupAutoRefresh(panelId);
+    }
+  });
+}
+
+initFullscreenMode();
+document.addEventListener('fullscreenchange', () => {
+  isFullscreen = !!document.fullscreenElement;
+  document.getElementById('toggleFullscreen').textContent = 
+    isFullscreen ? 'Exit Full Screen' : 'Full Screen';
+  document.body.classList.toggle('full-screen-active', isFullscreen);
+});
+
+// Initialize auto-refresh
+initAutoRefresh();
+
+// Auto-analyze all panels on load
+setTimeout(() => {
+  document.querySelectorAll('[id^="fetchData"]').forEach(btn => {
+    const panelId = btn.id.replace('fetchData', '');
+    analyzeMarket(panelId || '');
+  });
+}, 500);
 });
 
