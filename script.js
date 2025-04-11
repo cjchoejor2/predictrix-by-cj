@@ -1188,6 +1188,11 @@ function updateChart(suffix, data, indicators) {
     chartInstances[chartId].destroy();
   }
   
+  // Format dates for display
+  const formattedLabels = data.timestamps.map(date => {
+    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  });
+  
   // Create datasets for additional indicators
   const macdDataset = {
     label: 'MACD',
@@ -1212,7 +1217,7 @@ function updateChart(suffix, data, indicators) {
   chartInstances[chartId] = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: data.timestamps.map(date => date.toLocaleTimeString()),
+      labels: formattedLabels,
       datasets: [{
         label: 'Price',
         data: data.closes,
@@ -1241,6 +1246,12 @@ function updateChart(suffix, data, indicators) {
           borderWidth: 1,
           padding: 12,
           callbacks: { 
+            title: (tooltipItems) => {
+              // Get the date from the timestamp
+              const index = tooltipItems[0].dataIndex;
+              const date = data.timestamps[index];
+              return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            },
             label: ctx => {
               if (ctx.dataset.label === 'Price') {
                 return `Price: ${ctx.parsed.y.toFixed(2)}`;
@@ -1317,7 +1328,16 @@ function updateChart(suffix, data, indicators) {
             color: '#BDC3C7',
             maxRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 10 // Limit number of ticks for better readability
+            maxTicksLimit: 5, // Reduced from 10 to 5 to show fewer labels
+            callback: function(val, index) {
+              // Only show a few labels to avoid overlapping
+              const labelsCount = this.getLabelForValue.length;
+              // Show first, last, and a few in between
+              if (index === 0 || index === labelsCount - 1 || index % Math.ceil(labelsCount / 4) === 0) {
+                return this.getLabelForValue(val);
+              }
+              return '';
+            }
           } 
         },
         y: { 
@@ -1336,6 +1356,7 @@ function updateChart(suffix, data, indicators) {
     }
   });
 }
+
 
 function updateLastUpdated() {
   const lastUpdatedEls = document.querySelectorAll('[id^="lastUpdated"]');
