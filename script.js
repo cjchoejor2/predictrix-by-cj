@@ -48,256 +48,6 @@ async function loadModel() {
   }
 }
 
-class CryptoData {
-  constructor(data) {
-    this.data = data;
-    this.timestamps = data.map(item => new Date(item[0]));
-    this.opens = data.map(item => parseFloat(item[1]));
-    this.highs = data.map(item => parseFloat(item[2]));
-    this.lows = data.map(item => parseFloat(item[3]));
-    this.closes = data.map(item => parseFloat(item[4]));
-    this.volumes = data.map(item => parseFloat(item[5]));
-    this.quoteVolumes = data.map(item => parseFloat(item[7]));
-  }
-
-  getLatest() {
-    const lastIndex = this.closes.length - 1;
-    return {
-      timestamp: this.timestamps[lastIndex],
-      price: this.closes[lastIndex],
-      volume: this.volumes[lastIndex],
-      quoteVolume: this.quoteVolumes[lastIndex]
-    };
-  }
-}
-
-// Function to detect strong signals
-function isStrongSignal(indicators) {
-  // Check for strong bullish signal
-  const strongBullish = 
-    indicators.ema5 > indicators.ema10 && 
-    indicators.ema10 > indicators.ema20 &&
-    indicators.rsi6 > 50 &&
-    indicators.macd.value > indicators.macd.signal;
-  
-  // Check for strong bearish signal
-  const strongBearish = 
-    indicators.ema5 < indicators.ema10 && 
-    indicators.ema10 < indicators.ema20 &&
-    indicators.rsi6 < 50 &&
-    indicators.macd.value < indicators.macd.signal;
-  
-  return strongBullish ? 'bullish' : (strongBearish ? 'bearish' : null);
-}
-
-// Function to detect volume spikes
-function detectVolumeSpike(volume, avgVolume) {
-  return volume > avgVolume * 1.5;
-}
-
-// Function to calculate MACD
-function calculateMACD(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
-  // Helper function for EMA calculation
-  function ema(values, period) {
-    if (values.length < period) return null;
-    const k = 2 / (period + 1);
-    let emaValue = values.slice(0, period).reduce((sum, val) => sum + val, 0) / period;
-    for (let i = period; i < values.length; i++) {
-      emaValue = values[i] * k + emaValue * (1 - k);
-    }
-    return emaValue;
-  }
-
-  const fastEMA = ema(closes, fastPeriod);
-  const slowEMA = ema(closes, slowPeriod);
-  const macdLine = fastEMA - slowEMA;
-  
-  // Calculate signal line (EMA of MACD line)
-  const macdValues = [];
-  for (let i = 0; i < closes.length; i++) {
-    if (i < slowPeriod - 1) {
-      macdValues.push(0);
-    } else {
-      const fast = ema(closes.slice(0, i + 1), fastPeriod);
-      const slow = ema(closes.slice(0, i + 1), slowPeriod);
-      macdValues.push(fast - slow);
-    }
-  }
-  
-  const signalLine = ema(macdValues, signalPeriod);
-  
-  return {
-    value: macdLine,
-    signal: signalLine,
-    histogram: macdLine - signalLine
-  };
-}
-
-// Function to calculate Bollinger Bands
-function calculateBollingerBands(closes, period = 20, multiplier = 2) {
-  // Helper function for SMA calculation
-  function sma(values, period) {
-    if (values.length < period) return null;
-    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
-  }
-
-  const ma = sma(closes, period);
-  
-  // Calculate standard deviation
-  let sum = 0;
-  for (let i = closes.length - period; i < closes.length; i++) {
-    sum += Math.pow(closes[i] - ma, 2);
-  }
-  const stdDev = Math.sqrt(sum / period);
-  
-  return {
-    middle: ma,
-    upper: ma + (multiplier * stdDev),
-    lower: ma - (multiplier * stdDev)
-  };
-}
-
-// Function to calculate ATR (Average True Range)
-function calculateATR(highs, lows, closes, period = 14) {
-  const trueRanges = [];
-  
-  // Calculate true ranges
-  for (let i = 1; i < closes.length; i++) {
-    const highLow = highs[i] - lows[i];
-    const highClose = Math.abs(highs[i] - closes[i-1]);
-    const lowClose = Math.abs(lows[i] - closes[i-1]);
-    
-    trueRanges.push(Math.max(highLow, highClose, lowClose));
-  }
-  
-  // Helper function for SMA calculation
-  function sma(values, period) {
-    if (values.length < period) return null;
-    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
-  }
-
-  // Calculate ATR as average of true ranges
-  return sma(trueRanges, period);
-}
-
-// Function to calculate VWAP (Volume Weighted Average Price)
-function calculateVWAP(highs, lows, closes, volumes) {
-  let cumulativeTPV = 0; // Typical Price × Volume
-  let cumulativeVolume = 0;
-  
-  for (let i = 0; i < closes.length; i++) {
-    const typicalPrice = (highs[i] + lows[i] + closes[i]) / 3;
-    cumulativeTPV += typicalPrice * volumes[i];
-    cumulativeVolume += volumes[i];
-  }
-  
-  return cumulativeTPV / cumulativeVolume;
-}
-
-// Function to get higher timeframe
-function getHigherTimeframe(currentTimeframe) {
-  const timeframes = ['1m', '5m', '15m', '1h', '2h', '4h', '1d'];
-  const currentIndex = timeframes.indexOf(currentTimeframe);
-  
-  if (currentIndex < timeframes.length - 1) {
-    return timeframes[currentIndex + 1];
-  }
-  
-  return currentTimeframe; // Already at highest timeframe
-}
-
-// IMPORTANT: Move calculateIndicators outside the DOMContentLoaded event
-function calculateIndicators(data) {
-  const closes = data.closes;
-  const highs = data.highs;
-  const lows = data.lows;
-  const volumes = data.volumes;
-  const quoteVolumes = data.quoteVolumes;
-  const latest = data.getLatest();
-  
-  // Moving Averages
-  function sma(values, period) {
-    if (values.length < period) return null;
-    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
-  }
-  
-  function ema(values, period) {
-    if (values.length < period) return null;
-    const k = 2 / (period + 1);
-    let emaValue = sma(values.slice(0, period), period);
-    for (let i = period; i < values.length; i++) {
-      emaValue = values[i] * k + emaValue * (1 - k);
-    }
-    return emaValue;
-  }
-  
-  // RSI
-  function calculateRSI(closes, period) {
-    if (closes.length <= period) return 50;
-    let gains = 0, losses = 0;
-    for (let i = 1; i <= period; i++) {
-      const diff = closes[i] - closes[i - 1];
-      if (diff > 0) gains += diff; else losses -= diff;
-    }
-    const avgGain = gains / period;
-    const avgLoss = losses / period;
-    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
-  }
-  
-  // Support/Resistance
-  const recentHigh = Math.max(...highs.slice(-20));
-  const recentLow = Math.min(...lows.slice(-20));
-  const pivot = (recentHigh + recentLow + closes[closes.length - 1]) / 3;
-  const support1 = (2 * pivot) - recentHigh;
-  const resistance1 = (2 * pivot) - recentLow;
-
-  // Fibonacci
-  const fibLevels = {
-    '0.236': recentHigh - (recentHigh - recentLow) * 0.236,
-    '0.382': recentHigh - (recentHigh - recentLow) * 0.382,
-    '0.5': recentHigh - (recentHigh - recentLow) * 0.5,
-    '0.618': recentHigh - (recentHigh - recentLow) * 0.618,
-    '0.786': recentHigh - (recentHigh - recentLow) * 0.786
-  };
-  
-  // Calculate MACD
-  const macd = calculateMACD(closes);
-  
-  // Calculate Bollinger Bands
-  const bb = calculateBollingerBands(closes);
-  
-  // Calculate ATR
-  const atr = calculateATR(highs, lows, closes);
-  
-  // Calculate VWAP
-  const vwap = calculateVWAP(highs, lows, closes, volumes);
-  
-  return {
-    currentPrice: latest.price,
-    ema5: ema(closes, 5),
-    ema10: ema(closes, 10),
-    ema20: ema(closes, 20),
-    ma5: sma(closes, 5),
-    ma10: sma(closes, 10),
-    ma20: sma(closes, 20),
-    rsi6: calculateRSI(closes.slice(-7), 6),
-    rsi12: calculateRSI(closes.slice(-13), 12),
-    rsi24: calculateRSI(closes.slice(-25), 24),
-    volume: latest.quoteVolume,
-    avgVolume: sma(quoteVolumes.slice(-20), 20),
-    supportLevel: support1,
-    resistanceLevel: resistance1,
-    fibLevels: fibLevels,
-    recentHigh: recentHigh,
-    recentLow: recentLow,
-    macd: macd,
-    bollingerBands: bb,
-    atr: atr,
-    vwap: vwap
-  };
-}
-
 // Function to collect historical data for model training
 async function collectTrainingData(symbol, intervals = ['15m', '1h', '4h'], dataPoints = 1000) {
   try {
@@ -548,6 +298,164 @@ function checkModelStatus() {
   }
 }
 
+class CryptoData {
+  constructor(data) {
+    this.data = data;
+    this.timestamps = data.map(item => new Date(item[0]));
+    this.opens = data.map(item => parseFloat(item[1]));
+    this.highs = data.map(item => parseFloat(item[2]));
+    this.lows = data.map(item => parseFloat(item[3]));
+    this.closes = data.map(item => parseFloat(item[4]));
+    this.volumes = data.map(item => parseFloat(item[5]));
+    this.quoteVolumes = data.map(item => parseFloat(item[7]));
+  }
+
+  getLatest() {
+    const lastIndex = this.closes.length - 1;
+    return {
+      timestamp: this.timestamps[lastIndex],
+      price: this.closes[lastIndex],
+      volume: this.volumes[lastIndex],
+      quoteVolume: this.quoteVolumes[lastIndex]
+    };
+  }
+}
+
+// Function to detect strong signals
+function isStrongSignal(indicators) {
+  // Check for strong bullish signal
+  const strongBullish = 
+    indicators.ema5 > indicators.ema10 && 
+    indicators.ema10 > indicators.ema20 &&
+    indicators.rsi6 > 50 &&
+    indicators.macd.value > indicators.macd.signal;
+  
+  // Check for strong bearish signal
+  const strongBearish = 
+    indicators.ema5 < indicators.ema10 && 
+    indicators.ema10 < indicators.ema20 &&
+    indicators.rsi6 < 50 &&
+    indicators.macd.value < indicators.macd.signal;
+  
+  return strongBullish ? 'bullish' : (strongBearish ? 'bearish' : null);
+}
+
+// Function to detect volume spikes
+function detectVolumeSpike(volume, avgVolume) {
+  return volume > avgVolume * 1.5;
+}
+
+// Function to calculate MACD
+function calculateMACD(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+  // Helper function for EMA calculation
+  function ema(values, period) {
+    if (values.length < period) return null;
+    const k = 2 / (period + 1);
+    let emaValue = values.slice(0, period).reduce((sum, val) => sum + val, 0) / period;
+    for (let i = period; i < values.length; i++) {
+      emaValue = values[i] * k + emaValue * (1 - k);
+    }
+    return emaValue;
+  }
+
+  const fastEMA = ema(closes, fastPeriod);
+  const slowEMA = ema(closes, slowPeriod);
+  const macdLine = fastEMA - slowEMA;
+  
+  // Calculate signal line (EMA of MACD line)
+  const macdValues = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < slowPeriod - 1) {
+      macdValues.push(0);
+    } else {
+      const fast = ema(closes.slice(0, i + 1), fastPeriod);
+      const slow = ema(closes.slice(0, i + 1), slowPeriod);
+      macdValues.push(fast - slow);
+    }
+  }
+  
+  const signalLine = ema(macdValues, signalPeriod);
+  
+  return {
+    value: macdLine,
+    signal: signalLine,
+    histogram: macdLine - signalLine
+  };
+}
+
+// Function to calculate Bollinger Bands
+function calculateBollingerBands(closes, period = 20, multiplier = 2) {
+  // Helper function for SMA calculation
+  function sma(values, period) {
+    if (values.length < period) return null;
+    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  }
+
+  const ma = sma(closes, period);
+  
+  // Calculate standard deviation
+  let sum = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    sum += Math.pow(closes[i] - ma, 2);
+  }
+  const stdDev = Math.sqrt(sum / period);
+  
+  return {
+    middle: ma,
+    upper: ma + (multiplier * stdDev),
+    lower: ma - (multiplier * stdDev)
+  };
+}
+
+// Function to calculate ATR (Average True Range)
+function calculateATR(highs, lows, closes, period = 14) {
+  const trueRanges = [];
+  
+  // Calculate true ranges
+  for (let i = 1; i < closes.length; i++) {
+    const highLow = highs[i] - lows[i];
+    const highClose = Math.abs(highs[i] - closes[i-1]);
+    const lowClose = Math.abs(lows[i] - closes[i-1]);
+    
+    trueRanges.push(Math.max(highLow, highClose, lowClose));
+  }
+  
+  // Helper function for SMA calculation
+  function sma(values, period) {
+    if (values.length < period) return null;
+    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  }
+
+  // Calculate ATR as average of true ranges
+  return sma(trueRanges, period);
+}
+
+// Function to calculate VWAP (Volume Weighted Average Price)
+function calculateVWAP(highs, lows, closes, volumes) {
+  let cumulativeTPV = 0; // Typical Price × Volume
+  let cumulativeVolume = 0;
+  
+  for (let i = 0; i < closes.length; i++) {
+    const typicalPrice = (highs[i] + lows[i] + closes[i]) / 3;
+    cumulativeTPV += typicalPrice * volumes[i];
+    cumulativeVolume += volumes[i];
+  }
+  
+  return cumulativeTPV / cumulativeVolume;
+}
+
+// Function to get higher timeframe
+function getHigherTimeframe(currentTimeframe) {
+  const timeframes = ['1m', '5m', '15m', '1h', '2h', '4h', '1d'];
+  const currentIndex = timeframes.indexOf(currentTimeframe);
+  
+  if (currentIndex < timeframes.length - 1) {
+    return timeframes[currentIndex + 1];
+  }
+  
+  return currentTimeframe; // Already at highest timeframe
+}
+
 function generateDetailedAnalysis(indicators, timeframe) {
   const price = indicators.currentPrice.toFixed(4);
   const ema5 = indicators.ema5.toFixed(4);
@@ -669,7 +577,7 @@ function generateDetailedAnalysis(indicators, timeframe) {
     <div class="analysis-section">
       <h4>📌 Volatility & Volume</h4>
       <p>ATR: ${atr} → ${parseFloat(atr) > indicators.currentPrice * 0.02 ? "High" : "Low"} volatility</p>
-            <p>VWAP: ${vwap} → Price is ${indicators.currentPrice > indicators.vwap ? "above" : "below"} VWAP (${indicators.currentPrice > indicators.vwap ? "bullish" : "bearish"})</p>
+      <p>VWAP: ${vwap} → Price is ${indicators.currentPrice > indicators.vwap ? "above" : "below"} VWAP (${indicators.currentPrice > indicators.vwap ? "bullish" : "bearish"})</p>
       <p>VOL(BTC): ${volumeBTC} | VOL(USDT): ${volumeUSDT} → ${indicators.volume > indicators.avgVolume * 1.5 ? "High volume, potential breakout" : "Normal volume activity"}</p>
     </div>
     
@@ -721,6 +629,98 @@ function showAnalysisPopup(content) {
   });
 }
 
+// Function to calculate indicators
+function calculateIndicators(data) {
+  const closes = data.closes;
+  const highs = data.highs;
+  const lows = data.lows;
+  const volumes = data.volumes;
+  const quoteVolumes = data.quoteVolumes;
+  const latest = data.getLatest();
+  
+  // Moving Averages
+  function sma(values, period) {
+    if (values.length < period) return null;
+    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  }
+  
+  function ema(values, period) {
+    if (values.length < period) return null;
+    const k = 2 / (period + 1);
+    let emaValue = sma(values.slice(0, period), period);
+    for (let i = period; i < values.length; i++) {
+      emaValue = values[i] * k + emaValue * (1 - k);
+    }
+    return emaValue;
+  }
+  
+  // RSI
+  function calculateRSI(closes, period) {
+    if (closes.length <= period) return 50;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff > 0) gains += diff; else losses -= diff;
+    }
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+  
+  // Support/Resistance
+  const recentHigh = Math.max(...highs.slice(-20));
+  const recentLow = Math.min(...lows.slice(-20));
+  const pivot = (recentHigh + recentLow + closes[closes.length - 1]) / 3;
+  const support1 = (2 * pivot) - recentHigh;
+  const resistance1 = (2 * pivot) - recentLow;
+
+  // Fibonacci
+  const fibLevels = {
+    '0.236': recentHigh - (recentHigh - recentLow) * 0.236,
+    '0.382': recentHigh - (recentHigh - recentLow) * 0.382,
+    '0.5': recentHigh - (recentHigh - recentLow) * 0.5,
+    '0.618': recentHigh - (recentHigh - recentLow) * 0.618,
+    '0.786': recentHigh - (recentHigh - recentLow) * 0.786
+  };
+  
+  // Calculate MACD
+  const macd = calculateMACD(closes);
+  
+  // Calculate Bollinger Bands
+  const bb = calculateBollingerBands(closes);
+  
+  // Calculate ATR
+  const atr = calculateATR(highs, lows, closes);
+  
+  // Calculate VWAP
+  const vwap = calculateVWAP(highs, lows, closes, volumes);
+  
+  return {
+    currentPrice: latest.price,
+    ema5: ema(closes, 5),
+    ema10: ema(closes, 10),
+    ema20: ema(closes, 20),
+    ma5: sma(closes, 5),
+    ma10: sma(closes, 10),
+    ma20: sma(closes, 20),
+    rsi6: calculateRSI(closes.slice(-7), 6),
+    rsi12: calculateRSI(closes.slice(-13), 12),
+    rsi24: calculateRSI(closes.slice(-25), 24),
+    volume: latest.quoteVolume,
+    avgVolume: sma(quoteVolumes.slice(-20), 20),
+    supportLevel: support1,
+    resistanceLevel: resistance1,
+    fibLevels: fibLevels,
+    recentHigh: recentHigh,
+    recentLow: recentLow,
+    macd: macd,
+    bollingerBands: bb,
+    atr: atr,
+    vwap: vwap
+  };
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Try to load saved model first
   predictionModel = await loadSavedModel();
@@ -761,23 +761,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleFullscreenBtn.addEventListener('click', toggleFullscreen);
   }
   
-  // Add train model button
-  const controlsContainer = document.querySelector('.controls-container');
-  if (controlsContainer) {
-    const trainModelBtn = document.createElement('button');
-    trainModelBtn.id = 'trainModelBtn';
-    trainModelBtn.className = 'action-button';
-    trainModelBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Train Model
-    `;
-    controlsContainer.appendChild(trainModelBtn);
-    
+  // Initialize Train Model button
+  const trainModelBtn = document.getElementById('trainModelBtn');
+  if (trainModelBtn) {
     trainModelBtn.addEventListener('click', async () => {
+      console.log('Train model button clicked');
       trainModelBtn.disabled = true;
       trainModelBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="animate-spin">
@@ -793,17 +781,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       `;
       
       try {
+        // Check if TensorFlow is available
+        if (typeof tf === 'undefined') {
+          throw new Error('TensorFlow library is not loaded. Please check your network connection.');
+        }
+        
         // Get symbol from first panel
-        const symbol = document.getElementById('symbol').value || 'BTCUSDT';
+        const symbol = document.getElementById('symbol')?.value || 'BTCUSDT';
+        console.log('Using symbol for training:', symbol);
         
         // Collect training data
+        console.log('Starting to collect training data...');
         const trainingData = await collectTrainingData(symbol);
+        console.log('Training data collected:', trainingData);
+        
+        if (!trainingData.features.length) {
+          throw new Error('No training data could be collected. Please try a different symbol or check your connection.');
+        }
         
         // Train model
+        console.log('Starting model training...');
         const trainedModel = await trainModel(trainingData);
+        console.log('Model training completed:', trainedModel);
         
         if (trainedModel) {
           // Save model
+          console.log('Saving trained model...');
           await saveModel(trainedModel);
           
           // Update global model
@@ -811,6 +814,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           // Show success message
           alert('Model trained and saved successfully!');
+        } else {
+          throw new Error('Model training failed to produce a valid model.');
         }
       } catch (error) {
         console.error('Training process failed:', error);
@@ -827,6 +832,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
       }
     });
+  } else {
+    console.error('Train Model button not found in the DOM');
   }
   
   // Initialize
@@ -1011,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const formattedUSDTVol = latest.quoteVolume >= 1000000 ? 
     `${(latest.quoteVolume/1000000).toFixed(3)}M` : latest.quoteVolume.toFixed(2);
 
-    indicatorValuesEl.innerHTML = `
+  indicatorValuesEl.innerHTML = `
     <div class="indicator-row">
       <span>Price: ${latest.price.toFixed(4)}</span>
     </div>
@@ -1477,4 +1484,5 @@ setTimeout(() => {
   });
 }, 500);
 });
+
 

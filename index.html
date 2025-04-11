@@ -27,7 +27,7 @@
         <button id="toggleFullscreen" class="full-page-btn">Full Screen</button>
       </div>
       <div class="header-controls">
-        <button id="trainModelBtn" class="train-model-btn">
+        <button id="trainModelBtn" class="full-page-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -304,96 +304,6 @@
           </div>
 
           <div class="prediction-card" id="finalPrediction3">
-            <div class="prediction-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
-                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <div class="prediction-text">Awaiting analysis...</div>
-          </div>
-        </section>
-      </main>
-      
-      <!-- Additional Column 3 -->
-      <main class="app-content">
-        <section class="control-panel">
-          <div class="input-group">
-            <label for="symbol4">TRADING PAIR</label>
-            <select id="symbol4">
-              <option value="XRPUSDT">XRP/USDT</option>
-              <option value="BTCUSDT">BTC/USDT</option>
-              <option value="PIUSDT">PI/USDT</option>
-              <option value="SOLUSDT">SOL/USDT</option>
-              <option value="ETHUSDT">ETH/USDT</option>
-            </select>
-          </div>
-          
-          <div class="input-row">
-            <div class="input-group">
-              <label for="interval4">TIMEFRAME</label>
-              <select id="interval4">
-                <option value="1m">1 minute</option>
-                <option value="5m">5 minutes</option>
-                <option value="15m">15 minutes</option>
-                <option value="1h" selected>1 Hour</option>
-                <option value="2h">2 Hours</option>
-                <option value="4h">4 Hours</option>
-                <option value="1d">1 Day</option>
-              </select>
-            </div>
-            
-            <div class="input-group">
-              <label for="limit4">DATA POINTS</label>
-              <input type="number" id="limit4" value="100" min="24" max="1000">
-            </div>
-          </div>
-          
-          <button id="fetchData4" class="analyze-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
-              <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            ANALYZE MARKET
-          </button>
-        </section>
-
-        <section class="chart-container">
-          <canvas id="priceChart4"></canvas>
-        </section>
-
-        <div class="indicator-values" id="indicatorValues4">
-          <!-- Will be populated by JavaScript -->
-        </div>
-
-        <section class="results-panel">
-          <div class="probability-cards">
-            <div class="probability-card bullish">
-              <div class="probability-value" id="bullishProb4">0%</div>
-              <div class="probability-label">Bullish</div>
-              <div class="probability-bar">
-                <div class="probability-bar-fill" style="width: 0%"></div>
-              </div>
-            </div>
-            
-            <div class="probability-card neutral">
-              <div class="probability-value" id="neutralProb4">0%</div>
-              <div class="probability-label">Neutral</div>
-              <div class="probability-bar">
-                <div class="probability-bar-fill" style="width: 0%"></div>
-              </div>
-            </div>
-            
-            <div class="probability-card bearish">
-              <div class="probability-value" id="bearishProb4">0%</div>
-              <div class="probability-label">Bearish</div>
-              <div class="probability-bar">
-                <div class="probability-bar-fill" style="width: 0%"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="prediction-card" id="finalPrediction4">
             <div class="prediction-icon">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
