@@ -26,7 +26,17 @@
         <!-- Change the button in the header -->
         <button id="toggleFullscreen" class="full-page-btn">Full Screen</button>
       </div>
-      <div class="last-updated" id="lastUpdated">Loading...</div>
+      <div class="header-controls">
+        <button id="trainModelBtn" class="train-model-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Train Model
+        </button>
+        <div class="last-updated" id="lastUpdated">Loading...</div>
+      </div>
     </header>
 
     <div class="multi-column-container">
@@ -304,7 +314,7 @@
           </div>
         </section>
       </main>
-
+      
       <!-- Additional Column 3 -->
       <main class="app-content">
         <section class="control-panel">
@@ -399,4 +409,3 @@
   <script src="script.js"></script>
 </body>
 </html>
-
