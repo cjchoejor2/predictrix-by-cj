@@ -861,6 +861,54 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     return;
   }
   
+  // Calculate a comprehensive market score based on technical indicators
+  const emaAlignment = indicators.ema5 > indicators.ema10 && indicators.ema10 > indicators.ema20;
+  const rsiStrength = indicators.rsi6 > 50 ? (indicators.rsi6 - 50) / 50 : (50 - indicators.rsi6) / 50 * -1;
+  const macdSignal = indicators.macd.value > indicators.macd.signal ? 1 : -1;
+  const bbPosition = (indicators.currentPrice - indicators.bollingerBands.lower) / 
+                    (indicators.bollingerBands.upper - indicators.bollingerBands.lower) - 0.5;
+  const volumeStrength = (indicators.volume / indicators.avgVolume - 1) * 0.5;
+  
+  // Weighted market score (-1 to 1 scale)
+  const marketScore = (
+    (emaAlignment ? 0.3 : -0.3) + 
+    (rsiStrength * 0.2) + 
+    (macdSignal * 0.2) + 
+    (bbPosition * 0.15) + 
+    (volumeStrength * 0.15)
+  );
+  
+  // Convert market score to probabilities (ensuring they sum to 100%)
+  let calculatedBullish, calculatedBearish, calculatedNeutral;
+  
+  if (marketScore > 0.3) {
+    // Strong bullish
+    calculatedBullish = 50 + marketScore * 50;
+    calculatedBearish = (100 - calculatedBullish) * 0.3;
+    calculatedNeutral = 100 - calculatedBullish - calculatedBearish;
+  } else if (marketScore < -0.3) {
+    // Strong bearish
+    calculatedBearish = 50 + Math.abs(marketScore) * 50;
+    calculatedBullish = (100 - calculatedBearish) * 0.3;
+    calculatedNeutral = 100 - calculatedBullish - calculatedBearish;
+  } else {
+    // Neutral with slight bias
+    calculatedNeutral = 50 - Math.abs(marketScore) * 50;
+    if (marketScore > 0) {
+      calculatedBullish = (100 - calculatedNeutral) * 0.7;
+      calculatedBearish = 100 - calculatedNeutral - calculatedBullish;
+    } else {
+      calculatedBearish = (100 - calculatedNeutral) * 0.7;
+      calculatedBullish = 100 - calculatedNeutral - calculatedBearish;
+    }
+  }
+  
+  // Update the probability values
+  probabilities.bullish = calculatedBullish;
+  probabilities.bearish = calculatedBearish;
+  probabilities.neutral = calculatedNeutral;
+  
+  // Update the displayed probabilities
   bullishProbEl.textContent = `${probabilities.bullish.toFixed(1)}%`;
   bearishProbEl.textContent = `${probabilities.bearish.toFixed(1)}%`;
   neutralProbEl.textContent = `${probabilities.neutral.toFixed(1)}%`;
@@ -875,65 +923,24 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
   // Calculate price change percentage
   const priceChangePercent = ((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100);
   
-  // Determine prediction based on multiple factors, not just probabilities
+  // Determine prediction based on market score
   let prediction, predictionClass;
   
-  // Use a more comprehensive approach to determine market direction
-  const priceAboveEMA = indicators.currentPrice > indicators.ema5 && indicators.currentPrice > indicators.ema10;
-  const emaUptrend = indicators.ema5 > indicators.ema10 && indicators.ema10 > indicators.ema20;
-  const rsiStrong = indicators.rsi6 > 55;
-  const rsiWeak = indicators.rsi6 < 45;
-  const macdBullish = indicators.macd.value > indicators.macd.signal;
-  const volumeStrong = indicators.volume > indicators.avgVolume * 1.2;
-  
-  // Calculate a more reliable score
-  const bullishSignals = [
-    priceAboveEMA,
-    emaUptrend,
-    rsiStrong,
-    macdBullish,
-    volumeStrong,
-    priceChangePercent > 0.1
-  ].filter(Boolean).length;
-  
-  const bearishSignals = [
-    !priceAboveEMA,
-    !emaUptrend,
-    rsiWeak,
-    !macdBullish,
-    !volumeStrong,
-    priceChangePercent < -0.1
-  ].filter(Boolean).length;
-  
-  // Ensure prediction text matches the actual price movement
-  if (bullishSignals >= 4) {
+  if (marketScore > 0.5) {
     prediction = "Strong Bullish Trend";
     predictionClass = "bullish";
-  } else if (bearishSignals >= 4) {
+  } else if (marketScore > 0.2) {
+    prediction = "Bullish Bias";
+    predictionClass = "bullish";
+  } else if (marketScore < -0.5) {
     prediction = "Strong Bearish Trend";
     predictionClass = "bearish";
-  } else if (bullishSignals > bearishSignals) {
-    prediction = "Mild Bullish Bias";
-    predictionClass = "bullish";
-  } else if (bearishSignals > bullishSignals) {
-    prediction = "Mild Bearish Bias";
+  } else if (marketScore < -0.2) {
+    prediction = "Bearish Bias";
     predictionClass = "bearish";
   } else {
     prediction = "Neutral Market";
     predictionClass = "neutral";
-  }
-  
-  // Double-check that prediction matches price change direction
-  if ((predictionClass === "bullish" && priceChangePercent < -0.5) || 
-      (predictionClass === "bearish" && priceChangePercent > 0.5)) {
-    console.warn("Prediction inconsistent with price change, adjusting...");
-    if (priceChangePercent > 0) {
-      prediction = priceChangePercent > 0.5 ? "Bullish Momentum" : "Slight Bullish";
-      predictionClass = "bullish";
-    } else {
-      prediction = priceChangePercent < -0.5 ? "Bearish Pressure" : "Slight Bearish";
-      predictionClass = "bearish";
-    }
   }
   
   finalPredictionEl.className = `prediction-card ${predictionClass}`;
@@ -942,24 +949,25 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
         ${predictionClass === "bullish" ? '<path d="M8 12L11 15L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : ''}
-                  ${predictionClass === "bearish" ? '<path d="M8 8L16 16M8 16L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : ''}
-          ${predictionClass === "neutral" ? '<path d="M12 16V12M12 8V12M12 12H16M12 12H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : ''}
-        </svg>
-      </div>
-      <div class="prediction-text">
-        <div class="prediction-title">${prediction}</div>
-        <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${priceChangePercent > 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)</div>
-      </div>
-      <button class="details-btn">Details</button>
-    `;
-    
-    // Add click handler for the Details button
-    finalPredictionEl.querySelector('.details-btn').addEventListener('click', () => {
-      const timeframe = intervalSelect.options[intervalSelect.selectedIndex].text;
-      const analysis = generateDetailedAnalysis(indicators, timeframe);
-      showAnalysisPopup(analysis);
-    });
-  }
+        ${predictionClass === "bearish" ? '<path d="M8 8L16 16M8 16L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : ''}
+        ${predictionClass === "neutral" ? '<path d="M12 16V12M12 8V12M12 12H16M12 12H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : ''}
+      </svg>
+    </div>
+    <div class="prediction-text">
+      <div class="prediction-title">${prediction}</div>
+      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${priceChangePercent > 0 ? '+' : ''}${priceChangePercent.toFixed(2)}%)</div>
+    </div>
+    <button class="details-btn">Details</button>
+  `;
+  
+  // Add click handler for the Details button
+  finalPredictionEl.querySelector('.details-btn').addEventListener('click', () => {
+    const timeframe = intervalSelect.options[intervalSelect.selectedIndex].text;
+    const analysis = generateDetailedAnalysis(indicators, timeframe);
+    showAnalysisPopup(analysis);
+  });
+}
+
 
   function updateChart(suffix, data, indicators) {
     const chartId = `priceChart${suffix}`;
