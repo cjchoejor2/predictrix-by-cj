@@ -130,54 +130,78 @@ async function collectTrainingData(symbol, intervals = ['15m', '1h', '4h'], data
 }
 
 // Function to train the TensorFlow model
-async function trainModel(trainingData, epochs = 50, batchSize = 32) {
+async function trainModel(trainingData, epochs = 100, batchSize = 64) {
   try {
     if (!trainingData.features.length || !trainingData.labels.length) {
       throw new Error("No training data available");
     }
-    
+
     console.log(`Training model with ${trainingData.features.length} samples...`);
-    
-    // Create a new model or reset existing one
+
+    // Normalize features between 0 and 1
+    const features = trainingData.features;
+    const featureCount = features[0].length;
+
+    const minVals = Array(featureCount).fill(Infinity);
+    const maxVals = Array(featureCount).fill(-Infinity);
+
+    features.forEach(f => {
+      f.forEach((val, i) => {
+        if (val < minVals[i]) minVals[i] = val;
+        if (val > maxVals[i]) maxVals[i] = val;
+      });
+    });
+
+    const normalizedFeatures = features.map(f => 
+      f.map((val, i) => (maxVals[i] - minVals[i]) !== 0 
+        ? (val - minVals[i]) / (maxVals[i] - minVals[i]) 
+        : 0)
+    );
+
+    // Create a stronger model
     const model = tf.sequential();
     model.add(tf.layers.dense({
-      units: 16,
+      units: 64,
       activation: 'relu',
-      inputShape: [5]           // 5 features
+      inputShape: [featureCount]
     }));
-    
-    model.add(tf.layers.dropout(0.2));
-    
+    model.add(tf.layers.dropout(0.3));
+
     model.add(tf.layers.dense({
-      units: 8,
+      units: 32,
       activation: 'relu'
     }));
-    
+    model.add(tf.layers.dropout(0.2));
+
     model.add(tf.layers.dense({
-      units: 3,                 // 3 outputs: bullish, neutral, bearish
+      units: 16,
+      activation: 'relu'
+    }));
+
+    model.add(tf.layers.dense({
+      units: 3, // bullish, neutral, bearish
       activation: 'softmax'
     }));
-    
+
     model.compile({
-      optimizer: tf.train.adam(0.001), // Explicit learning rate
+      optimizer: tf.train.adam(0.001),
       loss: 'categoricalCrossentropy',
       metrics: ['accuracy']
     });
-    
-    // Convert data to tensors
-    const xs = tf.tensor2d(trainingData.features);
+
+    // Tensors
+    const xs = tf.tensor2d(normalizedFeatures);
     const ys = tf.tensor2d(trainingData.labels);
-    
-    // Split data into training and validation sets (80/20 split)
-    const splitIdx = Math.floor(trainingData.features.length * 0.8);
-    
-    const trainXs = xs.slice([0, 0], [splitIdx, 5]);
+
+    const splitIdx = Math.floor(normalizedFeatures.length * 0.8);
+
+    const trainXs = xs.slice([0, 0], [splitIdx, featureCount]);
     const trainYs = ys.slice([0, 0], [splitIdx, 3]);
-    
-    const valXs = xs.slice([splitIdx, 0], [trainingData.features.length - splitIdx, 5]);
-    const valYs = ys.slice([splitIdx, 0], [trainingData.features.length - splitIdx, 3]);
-    
-    // Create status display element
+
+    const valXs = xs.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, featureCount]);
+    const valYs = ys.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, 3]);
+
+    // UI status
     let statusEl = document.getElementById('modelTrainingStatus');
     if (!statusEl) {
       statusEl = document.createElement('div');
@@ -185,8 +209,8 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
       statusEl.className = 'training-status';
       document.body.appendChild(statusEl);
     }
-    
-    // Train the model
+
+    // Train the beast
     const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
@@ -200,41 +224,36 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
               <div class="progress-bar">
                 <div class="progress-fill" style="width: ${progress}%"></div>
               </div>
-              <div>Accuracy: ${(logs.acc * 100).toFixed(2)}% | Loss: ${logs.loss.toFixed(4)}</div>
+              <div>Train Accuracy: ${(logs.acc * 100).toFixed(2)}% | Val Accuracy: ${(logs.val_accuracy * 100).toFixed(2)}%</div>
+              <div>Loss: ${logs.loss.toFixed(4)} | Val Loss: ${logs.val_loss.toFixed(4)}</div>
             </div>
           `;
-          console.log(`Epoch ${epoch + 1}: accuracy = ${logs.acc}, loss = ${logs.loss}`);
+          console.log(`Epoch ${epoch + 1}: Train acc = ${logs.acc}, Val acc = ${logs.val_accuracy}`);
         }
       }
     });
-    
-    // Clean up tensors
-    xs.dispose();
-    ys.dispose();
-    trainXs.dispose();
-    trainYs.dispose();
-    valXs.dispose();
-    valYs.dispose();
-    
-    // Update status - use the history object returned from fit()
-    const finalAccuracy = history.history.acc[history.history.acc.length - 1];
+
+    // Clean-up
+    tf.dispose([xs, ys, trainXs, trainYs, valXs, valYs]);
+
+    const finalAccuracy = history.history.val_accuracy[history.history.val_accuracy.length - 1];
     statusEl.innerHTML = `
       <div class="training-complete">
         <div>Model training complete!</div>
-        <div>Final accuracy: ${(finalAccuracy * 100).toFixed(2)}%</div>
+        <div>Final Validation Accuracy: ${(finalAccuracy * 100).toFixed(2)}%</div>
         <button id="closeTrainingStatus">Close</button>
       </div>
     `;
-    
+
     document.getElementById('closeTrainingStatus').addEventListener('click', () => {
       statusEl.remove();
     });
-    
+
     console.log("Model training complete!");
     return model;
+
   } catch (error) {
     console.error("Error training model:", error);
-    // Clean up any created elements
     const statusEl = document.getElementById('modelTrainingStatus');
     if (statusEl) {
       statusEl.remove();
@@ -242,6 +261,7 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     return null;
   }
 }
+
 
 // Function to save the trained model to localStorage
 async function saveModel(model) {
