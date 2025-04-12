@@ -141,12 +141,12 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     // Create a new model or reset existing one
     const model = tf.sequential();
     model.add(tf.layers.dense({
-      units: 16,                // Increased units for better learning capacity
+      units: 16,
       activation: 'relu',
       inputShape: [5]           // 5 features
     }));
     
-    model.add(tf.layers.dropout(0.2)); // Add dropout to prevent overfitting
+    model.add(tf.layers.dropout(0.2));
     
     model.add(tf.layers.dense({
       units: 8,
@@ -159,7 +159,7 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     }));
     
     model.compile({
-      optimizer: 'adam',
+      optimizer: tf.train.adam(0.001), // Explicit learning rate
       loss: 'categoricalCrossentropy',
       metrics: ['accuracy']
     });
@@ -187,7 +187,7 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     }
     
     // Train the model
-    await model.fit(trainXs, trainYs, {
+    const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
       validationData: [valXs, valYs],
@@ -216,11 +216,12 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     valXs.dispose();
     valYs.dispose();
     
-    // Update status
+    // Update status - use the history object returned from fit()
+    const finalAccuracy = history.history.acc[history.history.acc.length - 1];
     statusEl.innerHTML = `
       <div class="training-complete">
         <div>Model training complete!</div>
-        <div>Final accuracy: ${(model.history.history.acc[epochs-1] * 100).toFixed(2)}%</div>
+        <div>Final accuracy: ${(finalAccuracy * 100).toFixed(2)}%</div>
         <button id="closeTrainingStatus">Close</button>
       </div>
     `;
@@ -233,6 +234,11 @@ async function trainModel(trainingData, epochs = 50, batchSize = 32) {
     return model;
   } catch (error) {
     console.error("Error training model:", error);
+    // Clean up any created elements
+    const statusEl = document.getElementById('modelTrainingStatus');
+    if (statusEl) {
+      statusEl.remove();
+    }
     return null;
   }
 }
@@ -1484,5 +1490,3 @@ setTimeout(() => {
   });
 }, 500);
 });
-
-
