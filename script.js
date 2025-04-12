@@ -216,7 +216,6 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     }
 
     // Train the model
-    // Train the model
     const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
