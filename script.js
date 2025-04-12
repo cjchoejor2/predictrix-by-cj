@@ -1186,12 +1186,20 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
   });
   
   let prediction, predictionClass;
-  if (probabilities.bullish >= 50) prediction = "Strong Bullish Trend", predictionClass = "bullish";
-  else if (probabilities.bearish >= 50) prediction = "Strong Bearish Trend", predictionClass = "bearish";
-  else if (probabilities.bullish > probabilities.bearish) prediction = "Mild Bullish Bias", predictionClass = "bullish";
-  else if (probabilities.bearish > probabilities.bullish) prediction = "Mild Bearish Bias", predictionClass = "bearish";
-  else prediction = "Neutral Market", predictionClass = "neutral";
-  
+
+  // Determine the dominant probability
+  if (probabilities.bullish >= probabilities.neutral && probabilities.bullish >= probabilities.bearish) {
+    prediction = probabilities.bullish >= 50 ? "Strong Bullish Trend" : "Mild Bullish Bias";
+    predictionClass = "bullish";
+  } else if (probabilities.bearish >= probabilities.neutral && probabilities.bearish >= probabilities.bullish) {
+    prediction = probabilities.bearish >= 50 ? "Strong Bearish Trend" : "Mild Bearish Bias";
+    predictionClass = "bearish";
+  } else {
+    prediction = "Neutral Market";
+    predictionClass = "neutral";
+  }
+
+  // Update the prediction card
   finalPredictionEl.className = `prediction-card ${predictionClass}`;
   finalPredictionEl.innerHTML = `
     <div class="prediction-icon">
@@ -1204,7 +1212,7 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     </div>
     <div class="prediction-text">
       <div class="prediction-title">${prediction}</div>
-      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${(indicators.ema5 > indicators.ema10 ? '+' : '')}${((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100).toFixed(2)}%)</div>
+      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100).toFixed(2)}%)</div>
     </div>
     <button class="details-btn">Details</button>
   `;
