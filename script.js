@@ -49,7 +49,7 @@ async function loadModel() {
 }
 
 // Function to collect historical data for model training
-async function collectTrainingData(symbol, intervals = ['15m', '1h', '4h'], dataPoints = 1000) {
+async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', '1d'], dataPoints = 1000) {
   try {
     console.log("Collecting training data...");
     const trainingData = [];
