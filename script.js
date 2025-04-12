@@ -152,9 +152,9 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       });
     });
 
-    const normalizedFeatures = features.map(f => 
-      f.map((val, i) => (maxVals[i] - minVals[i]) !== 0 
-        ? (val - minVals[i]) / (maxVals[i] - minVals[i]) 
+    const normalizedFeatures = features.map(f =>
+      f.map((val, i) => (maxVals[i] - minVals[i]) !== 0
+        ? (val - minVals[i]) / (maxVals[i] - minVals[i])
         : 0)
     );
 
@@ -201,6 +201,11 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     const valXs = xs.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, featureCount]);
     const valYs = ys.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, 3]);
 
+    // Check validation data
+    if (valXs.shape[0] === 0 || valYs.shape[0] === 0) {
+      console.warn("Validation data is empty. Skipping validation metrics.");
+    }
+
     // UI status
     let statusEl = document.getElementById('modelTrainingStatus');
     if (!statusEl) {
@@ -210,11 +215,11 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       document.body.appendChild(statusEl);
     }
 
-    // Train the beast
+    // Train the model
     const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
-      validationData: [valXs, valYs],
+      validationData: valXs.shape[0] > 0 && valYs.shape[0] > 0 ? [valXs, valYs] : null,
       callbacks: {
         onEpochEnd: (epoch, logs) => {
           const progress = Math.round((epoch + 1) / epochs * 100);
@@ -224,11 +229,11 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
               <div class="progress-bar">
                 <div class="progress-fill" style="width: ${progress}%"></div>
               </div>
-              <div>Train Accuracy: ${(logs.acc * 100).toFixed(2)}% | Val Accuracy: ${(logs.val_accuracy * 100).toFixed(2)}%</div>
-              <div>Loss: ${logs.loss.toFixed(4)} | Val Loss: ${logs.val_loss.toFixed(4)}</div>
+              <div>Train Accuracy: ${(logs.acc * 100).toFixed(2)}% | Val Accuracy: ${(logs.val_accuracy ? logs.val_accuracy * 100 : 'N/A').toFixed(2)}%</div>
+              <div>Loss: ${logs.loss.toFixed(4)} | Val Loss: ${(logs.val_loss ? logs.val_loss.toFixed(4) : 'N/A')}</div>
             </div>
           `;
-          console.log(`Epoch ${epoch + 1}: Train acc = ${logs.acc}, Val acc = ${logs.val_accuracy}`);
+          console.log(`Epoch ${epoch + 1}: Train acc = ${logs.acc}, Val acc = ${logs.val_accuracy || 'N/A'}`);
         }
       }
     });
@@ -236,11 +241,14 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     // Clean-up
     tf.dispose([xs, ys, trainXs, trainYs, valXs, valYs]);
 
-    const finalAccuracy = history.history.val_accuracy[history.history.val_accuracy.length - 1];
+    const finalAccuracy = history.history.val_accuracy
+      ? history.history.val_accuracy[history.history.val_accuracy.length - 1]
+      : null;
+
     statusEl.innerHTML = `
       <div class="training-complete">
         <div>Model training complete!</div>
-        <div>Final Validation Accuracy: ${(finalAccuracy * 100).toFixed(2)}%</div>
+        <div>Final Validation Accuracy: ${finalAccuracy ? (finalAccuracy * 100).toFixed(2) : 'N/A'}%</div>
         <button id="closeTrainingStatus">Close</button>
       </div>
     `;
