@@ -216,6 +216,7 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     }
 
     // Train the model
+    // Train the model
     const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
@@ -223,13 +224,13 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       callbacks: {
         onEpochEnd: (epoch, logs) => {
           const progress = Math.round((epoch + 1) / epochs * 100);
-        
+
           // Safely handle undefined or missing metrics
           const trainAcc = logs.acc ? (logs.acc * 100).toFixed(2) : 'N/A';
           const valAcc = logs.val_accuracy ? (logs.val_accuracy * 100).toFixed(2) : 'N/A';
           const trainLoss = logs.loss ? logs.loss.toFixed(4) : 'N/A';
           const valLoss = logs.val_loss ? logs.val_loss.toFixed(4) : 'N/A';
-        
+
           statusEl.innerHTML = `
             <div class="training-progress">
               <div>Training model: ${progress}% complete</div>
