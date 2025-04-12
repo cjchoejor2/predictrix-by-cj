@@ -223,17 +223,24 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       callbacks: {
         onEpochEnd: (epoch, logs) => {
           const progress = Math.round((epoch + 1) / epochs * 100);
+        
+          // Safely handle undefined or missing metrics
+          const trainAcc = logs.acc ? (logs.acc * 100).toFixed(2) : 'N/A';
+          const valAcc = logs.val_accuracy ? (logs.val_accuracy * 100).toFixed(2) : 'N/A';
+          const trainLoss = logs.loss ? logs.loss.toFixed(4) : 'N/A';
+          const valLoss = logs.val_loss ? logs.val_loss.toFixed(4) : 'N/A';
+        
           statusEl.innerHTML = `
             <div class="training-progress">
               <div>Training model: ${progress}% complete</div>
               <div class="progress-bar">
                 <div class="progress-fill" style="width: ${progress}%"></div>
               </div>
-              <div>Train Accuracy: ${(logs.acc * 100).toFixed(2)}% | Val Accuracy: ${(logs.val_accuracy ? logs.val_accuracy * 100 : 'N/A').toFixed(2)}%</div>
-              <div>Loss: ${logs.loss.toFixed(4)} | Val Loss: ${(logs.val_loss ? logs.val_loss.toFixed(4) : 'N/A')}</div>
+              <div>Train Accuracy: ${trainAcc}% | Val Accuracy: ${valAcc}%</div>
+              <div>Loss: ${trainLoss} | Val Loss: ${valLoss}</div>
             </div>
           `;
-          console.log(`Epoch ${epoch + 1}: Train acc = ${logs.acc}, Val acc = ${logs.val_accuracy || 'N/A'}`);
+          console.log(`Epoch ${epoch + 1}: Train acc = ${trainAcc}, Val acc = ${valAcc}`);
         }
       }
     });
