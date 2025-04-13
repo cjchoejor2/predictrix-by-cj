@@ -670,6 +670,32 @@ function showAnalysisPopup(content) {
   });
 }
 
+function calculateEnhancedPercentage(indicators) {
+  // Base percentage change using EMA5 and EMA10
+  let percentageChange = (indicators.ema5 - indicators.ema10) / indicators.ema10 * 100;
+
+  // Adjust percentage based on RSI
+  const rsiImpact = indicators.rsi6 > 70 ? -0.5 : indicators.rsi6 < 30 ? 0.5 : 0;
+  percentageChange += rsiImpact;
+
+  // Adjust percentage based on MACD
+  const macdImpact = indicators.macd.value > indicators.macd.signal ? 0.3 : -0.3;
+  percentageChange += macdImpact;
+
+  // Adjust percentage based on Bollinger Bands
+  const bbPosition = (indicators.currentPrice - indicators.bollingerBands.lower) / 
+                     (indicators.bollingerBands.upper - indicators.bollingerBands.lower);
+  const bbImpact = bbPosition > 0.8 ? -0.5 : bbPosition < 0.2 ? 0.5 : 0;
+  percentageChange += bbImpact;
+
+  // Adjust percentage based on Volume
+  const volumeImpact = indicators.volume > indicators.avgVolume * 1.5 ? 0.3 : 
+                       indicators.volume < indicators.avgVolume * 0.8 ? -0.3 : 0;
+  percentageChange += volumeImpact;
+
+  return percentageChange;
+}
+
 // Function to calculate indicators
 function calculateIndicators(data) {
   const closes = data.closes;
@@ -917,7 +943,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('toggleFullscreen').textContent = 'Exit Full Screen';
     }
   }
-
   async function analyzeMarket(panelId = '') {
     try {
       const suffix = panelId;
@@ -965,7 +990,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // If sync is enabled, analyze other panels with the same symbol
       if (isSyncEnabled) {
-        syncOtherPanels(suffix, symbol);
+        syncPanelsWithMatchingPairs(suffix, symbol);
       }
       
     } catch (error) {
@@ -987,6 +1012,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
   }
+  
 
   function syncOtherPanels(currentPanelId, symbol) {
     // Find all symbol selects
@@ -1219,7 +1245,10 @@ function updateUI(suffix, cryptoData, indicators, probabilities) {
     </div>
     <div class="prediction-text">
       <div class="prediction-title">${prediction}</div>
-      <div class="prediction-subtitle">${cryptoData.getLatest().price.toFixed(4)} (${((indicators.ema5 - indicators.ema10) / indicators.ema10 * 100).toFixed(2)}%)</div>
+      <div class="prediction-subtitle">
+        ${cryptoData.getLatest().price.toFixed(4)} 
+        (${calculateEnhancedPercentage(indicators).toFixed(2)}%)
+      </div>
     </div>
     <button class="details-btn">Details</button>
   `;
@@ -1414,6 +1443,31 @@ function updateChart(suffix, data, indicators) {
   });
 }
 
+function analyzeAllMarkets() {
+  const fetchButtons = document.querySelectorAll('[id^="fetchData"]'); // "Analyze Market" buttons have IDs like "fetchData1", "fetchData2", etc.
+
+  fetchButtons.forEach(fetchButton => {
+    const panelId = fetchButton.id.replace('fetchData', ''); // Extract panel ID
+    analyzeMarket(panelId); // Execute "Analyze Market" for each panel
+  });
+}
+
+function syncPanelsWithMatchingPairs(currentPanelId, symbol) {
+  const symbolInputs = document.querySelectorAll('[id^="symbol"]'); // Trading pair inputs have IDs like "symbol1", "symbol2", etc.
+
+  symbolInputs.forEach(symbolInput => {
+    const panelId = symbolInput.id.replace('symbol', ''); // Extract panel ID
+
+    // Skip the current panel
+    if (panelId === currentPanelId) return;
+
+    // If the trading pair matches, execute "Analyze Market"
+    if (symbolInput.value.toUpperCase() === symbol.toUpperCase()) {
+      analyzeMarket(panelId);
+    }
+  });
+}
+
 function updateLastUpdated() {
   const lastUpdatedEls = document.querySelectorAll('[id^="lastUpdated"]');
   lastUpdatedEls.forEach(el => {
@@ -1486,33 +1540,62 @@ function setupAutoRefresh(panelId = '') {
   }
 }
 
-// Initialize auto-refresh toggles
-function initAutoRefresh() {
-  const autoRefreshToggles = document.querySelectorAll('[id^="autoRefresh"]');
-  autoRefreshToggles.forEach(toggle => {
-    const panelId = toggle.id.replace('autoRefresh', '');
-    
-    // Add change listener
-    toggle.addEventListener('change', () => {
-      setupAutoRefresh(panelId);
-    });
-    
-    // Also listen for interval changes
-    const intervalEl = document.getElementById(`refreshInterval${panelId}`);
-    if (intervalEl) {
-      intervalEl.addEventListener('change', () => {
-        if (toggle.checked) {
-          setupAutoRefresh(panelId);
+function initTickButton() {
+  const tickButtons = document.querySelectorAll('[id^="tickButton"]'); // Tick buttons have IDs like "tickButton1", "tickButton2", etc.
+
+  tickButtons.forEach(tickButton => {
+    const panelId = tickButton.id.replace('tickButton', ''); // Extract panel ID (e.g., "1", "2", etc.)
+
+    // Add change listener for the tick button
+    tickButton.addEventListener('change', () => {
+      const isTicked = tickButton.checked;
+
+      if (isTicked) {
+        // Execute "Analyze Market" for all app-contents once
+        analyzeAllMarkets();
+
+        // Start auto-refresh every 10 seconds
+        autoRefreshIntervals[panelId] = setInterval(() => {
+          analyzeAllMarkets();
+        }, 10000); // 10 seconds
+      } else {
+        // Stop auto-refresh
+        if (autoRefreshIntervals[panelId]) {
+          clearInterval(autoRefreshIntervals[panelId]);
+          delete autoRefreshIntervals[panelId];
         }
-      });
-    }
-    
-    // Setup initial state if enabled
-    if (toggle.checked) {
-      setupAutoRefresh(panelId);
-    }
+      }
+    });
   });
 }
+
+// // Initialize auto-refresh toggles
+// function initAutoRefresh() {
+//   const autoRefreshToggles = document.querySelectorAll('[id^="autoRefresh"]');
+//   autoRefreshToggles.forEach(toggle => {
+//     const panelId = toggle.id.replace('autoRefresh', '');
+    
+//     // Add change listener
+//     toggle.addEventListener('change', () => {
+//       setupAutoRefresh(panelId);
+//     });
+    
+//     // Also listen for interval changes
+//     const intervalEl = document.getElementById(`refreshInterval${panelId}`);
+//     if (intervalEl) {
+//       intervalEl.addEventListener('change', () => {
+//         if (toggle.checked) {
+//           setupAutoRefresh(panelId);
+//         }
+//       });
+//     }
+    
+//     // Setup initial state if enabled
+//     if (toggle.checked) {
+//       setupAutoRefresh(panelId);
+//     }
+//   });
+// }
 
 initFullscreenMode();
 document.addEventListener('fullscreenchange', () => {
@@ -1523,8 +1606,8 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // Initialize auto-refresh
-initAutoRefresh();
-
+// initAutoRefresh();
+initTickButton();
 // Auto-analyze all panels on load
 setTimeout(() => {
   document.querySelectorAll('[id^="fetchData"]').forEach(btn => {
