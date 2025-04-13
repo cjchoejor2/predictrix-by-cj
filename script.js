@@ -1568,7 +1568,23 @@ function initTickButton() {
     });
   });
 }
+// Initialize the slider button functionality
+document.getElementById('syncToggle').addEventListener('change', (event) => {
+  const isChecked = event.target.checked;
 
+  if (isChecked) {
+    console.log('Slider is ON');
+    // Add logic to start auto-refresh or execute actions
+    analyzeAllMarkets();
+    autoRefreshInterval = setInterval(() => {
+      analyzeAllMarkets();
+    }, 10000); // 10 seconds
+  } else {
+    console.log('Slider is OFF');
+    // Add logic to stop auto-refresh or actions
+    clearInterval(autoRefreshInterval);
+  }
+});
 // // Initialize auto-refresh toggles
 // function initAutoRefresh() {
 //   const autoRefreshToggles = document.querySelectorAll('[id^="autoRefresh"]');
@@ -1606,8 +1622,7 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // Initialize auto-refresh
-// initAutoRefresh();
-initTickButton();
+// initTickButton();
 // Auto-analyze all panels on load
 setTimeout(() => {
   document.querySelectorAll('[id^="fetchData"]').forEach(btn => {
