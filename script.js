@@ -94,12 +94,15 @@ async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', 
         
         // Create feature vector
         const features = [
-          indicators.ema5 / indicators.ema20,                  // EMA ratio
-          indicators.rsi6 / 100,                               // Normalized RSI
-          indicators.macd.histogram,                           // MACD histogram
+          indicators.ema5 / indicators.ema20, // EMA ratio
+          indicators.rsi6 / 100, // Normalized RSI
+          indicators.macd.histogram, // MACD histogram
           (indicators.currentPrice - indicators.bollingerBands.lower) / 
           (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
-          indicators.volume / indicators.avgVolume             // Volume ratio
+          indicators.volume / indicators.avgVolume, // Volume ratio
+          indicators.adx / 100, // ADX (trend strength)
+          indicators.stochasticRSI, // Stochastic RSI
+          detectCandlePattern(data) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
         ];
         
         // Determine outcome (label) based on future price movement
@@ -152,11 +155,9 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       });
     });
 
-    const normalizedFeatures = features.map(f =>
-      f.map((val, i) => (maxVals[i] - minVals[i]) !== 0
-        ? (val - minVals[i]) / (maxVals[i] - minVals[i])
-        : 0)
-    );
+    const mean = features.reduce((sum, f) => sum + f, 0) / features.length;
+    const stdDev = Math.sqrt(features.reduce((sum, f) => sum + Math.pow(f - mean, 2), 0) / features.length);
+    const normalizedFeatures = features.map(f => (f - mean) / stdDev);
 
     // Create a stronger model
     const model = tf.sequential();
@@ -313,6 +314,17 @@ async function loadSavedModel() {
   }
 }
 
+async function fetchNewsSentiment(keyword) {
+  const response = await fetch(`https://newsapi.org/v2/everything?q=${keyword}&apiKey=YOUR_API_KEY`);
+  const data = await response.json();
+  const sentiment = analyzeSentiment(data.articles.map(article => article.description).join(' '));
+  return sentiment;
+}
+
+function analyzeSentiment(text) {
+  // Use a simple sentiment analysis library or API
+  return text.includes('bullish') ? 'Positive' : text.includes('bearish') ? 'Negative' : 'Neutral';
+}
 // Function to check if model needs updating (older than 7 days)
 function modelNeedsUpdate() {
   const lastTrained = localStorage.getItem('model-last-trained');
@@ -322,6 +334,11 @@ function modelNeedsUpdate() {
   return daysSinceTraining > 7; // Update weekly
 }
 
+function logPredictionOutcome(prediction, actual) {
+  const log = JSON.parse(localStorage.getItem('predictionLog') || '[]');
+  log.push({ prediction, actual, timestamp: Date.now() });
+  localStorage.setItem('predictionLog', JSON.stringify(log));
+}
 // Add a notification if model needs update
 function checkModelStatus() {
   if (modelNeedsUpdate()) {
@@ -424,6 +441,43 @@ function calculateMACD(closes, fastPeriod = 12, slowPeriod = 26, signalPeriod = 
   };
 }
 
+function calculateADX(highs, lows, closes, period = 14) {
+  const tr = []; // True Range
+  const plusDM = [];
+  const minusDM = [];
+
+  for (let i = 1; i < highs.length; i++) {
+    const highDiff = highs[i] - highs[i - 1];
+    const lowDiff = lows[i - 1] - lows[i];
+    tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+    plusDM.push(highDiff > lowDiff && highDiff > 0 ? highDiff : 0);
+    minusDM.push(lowDiff > highDiff && lowDiff > 0 ? lowDiff : 0);
+  }
+
+  const smoothedTR = tr.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  const smoothedPlusDM = plusDM.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  const smoothedMinusDM = minusDM.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+
+  const plusDI = (smoothedPlusDM / smoothedTR) * 100;
+  const minusDI = (smoothedMinusDM / smoothedTR) * 100;
+  const dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI) * 100;
+
+  return dx; // ADX value
+}
+
+function detectCandlePattern(data) {
+  const lastCandle = data.data[data.data.length - 1];
+  const [open, high, low, close] = [lastCandle[1], lastCandle[2], lastCandle[3], lastCandle[4]];
+
+  if (close > open && (close - open) > (high - low) * 0.6) {
+    return 'Bullish Engulfing';
+  } else if (open > close && (open - close) > (high - low) * 0.6) {
+    return 'Bearish Engulfing';
+  } else if (Math.abs(close - open) < (high - low) * 0.1) {
+    return 'Doji';
+  }
+  return 'Neutral';
+}
 // Function to calculate Bollinger Bands
 function calculateBollingerBands(closes, period = 20, multiplier = 2) {
   // Helper function for SMA calculation
@@ -675,23 +729,35 @@ function calculateEnhancedPercentage(indicators) {
   let percentageChange = (indicators.ema5 - indicators.ema10) / indicators.ema10 * 100;
 
   // Adjust percentage based on RSI
-  const rsiImpact = indicators.rsi6 > 70 ? -0.5 : indicators.rsi6 < 30 ? 0.5 : 0;
+  const rsiImpact = indicators.rsi6 > 70
+    ? -(indicators.rsi6 - 70) / 30 // Scale down as RSI moves above 70
+    : indicators.rsi6 < 30
+    ? (30 - indicators.rsi6) / 30 // Scale up as RSI moves below 30
+    : 0;
   percentageChange += rsiImpact;
 
   // Adjust percentage based on MACD
-  const macdImpact = indicators.macd.value > indicators.macd.signal ? 0.3 : -0.3;
+  const macdDistance = indicators.macd.value - indicators.macd.signal;
+  const macdImpact = macdDistance / Math.abs(indicators.macd.signal || 1); // Normalize by signal
   percentageChange += macdImpact;
 
   // Adjust percentage based on Bollinger Bands
-  const bbPosition = (indicators.currentPrice - indicators.bollingerBands.lower) / 
+  const bbPosition = (indicators.currentPrice - indicators.bollingerBands.lower) /
                      (indicators.bollingerBands.upper - indicators.bollingerBands.lower);
-  const bbImpact = bbPosition > 0.8 ? -0.5 : bbPosition < 0.2 ? 0.5 : 0;
+  const bbImpact = bbPosition > 0.8
+    ? -(bbPosition - 0.8) * 0.5 // Scale down as price nears upper band
+    : bbPosition < 0.2
+    ? (0.2 - bbPosition) * 0.5 // Scale up as price nears lower band
+    : 0;
   percentageChange += bbImpact;
 
   // Adjust percentage based on Volume
-  const volumeImpact = indicators.volume > indicators.avgVolume * 1.5 ? 0.3 : 
-                       indicators.volume < indicators.avgVolume * 0.8 ? -0.3 : 0;
-  percentageChange += volumeImpact;
+  const volumeImpact = (indicators.volume - indicators.avgVolume) / indicators.avgVolume;
+  percentageChange += volumeImpact * 0.3; // Scale volume impact
+
+  // Normalize movement over ATR
+  const atrImpact = percentageChange / (indicators.atr || 1); // ATR normalization
+  percentageChange += atrImpact;
 
   return percentageChange;
 }
@@ -763,6 +829,10 @@ function calculateIndicators(data) {
   // Calculate VWAP
   const vwap = calculateVWAP(highs, lows, closes, volumes);
   
+  const ema5Slope = (indicators.ema5 - previousIndicators.ema5) / previousIndicators.ema5;
+  const rsiChange = indicators.rsi6 - previousIndicators.rsi6;
+  const volumeDelta = indicators.volume - previousIndicators.volume;
+
   return {
     currentPrice: latest.price,
     ema5: ema(closes, 5),
@@ -943,6 +1013,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('toggleFullscreen').textContent = 'Exit Full Screen';
     }
   }
+
   async function analyzeMarket(panelId = '') {
     try {
       const suffix = panelId;
@@ -1012,6 +1083,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
   }
+  
   
 
   function syncOtherPanels(currentPanelId, symbol) {
@@ -1132,42 +1204,49 @@ document.addEventListener('DOMContentLoaded', async () => {
 }
 
 function calculateProbabilities(indicators) {
-  // Try to use TensorFlow model if available
   if (predictionModel) {
     try {
-      // Prepare input data for the model
+      // Prepare input data for TensorFlow model
       const inputData = [
         indicators.ema5 / indicators.ema20, // EMA ratio
         indicators.rsi6 / 100, // Normalized RSI
         indicators.macd.histogram, // MACD histogram
         (indicators.currentPrice - indicators.bollingerBands.lower) / 
         (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
-        indicators.volume / indicators.avgVolume // Volume ratio
+        indicators.volume / indicators.avgVolume, // Volume ratio
+        indicators.adx / 100, // ADX (trend strength)
+        detectCandlePattern(indicators) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
       ];
-      
-      // Make prediction
+
+      // TensorFlow prediction
       const tensorInput = tf.tensor2d([inputData]);
       const prediction = predictionModel.predict(tensorInput);
       const probabilities = prediction.dataSync();
-      
-      // Clean up tensors
+
+      // Confidence score calculation
+      const sortedProbs = [...probabilities].sort((a, b) => b - a);
+      const confidence = sortedProbs[0] - sortedProbs[1]; // Difference between top two probabilities
+
+      // Dispose tensors to free memory
       tensorInput.dispose();
       prediction.dispose();
-      
-      // Return probabilities
+
+      // Return TensorFlow probabilities with confidence score
       return {
         bullish: probabilities[0] * 100,
         neutral: probabilities[1] * 100,
-        bearish: probabilities[2] * 100
+        bearish: probabilities[2] * 100,
+        confidence: confidence * 100
       };
     } catch (error) {
       console.error('TensorFlow prediction failed:', error);
-      // Fall back to traditional calculation
+
+      // Fall back to traditional probabilities if TensorFlow fails
       return calculateTraditionalProbabilities(indicators);
     }
   }
-  
-  // If no model or prediction failed, use traditional calculation
+
+  // If no TensorFlow model is available, use traditional probabilities
   return calculateTraditionalProbabilities(indicators);
 }
 
