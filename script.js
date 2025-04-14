@@ -466,6 +466,11 @@ function calculateADX(highs, lows, closes, period = 14) {
 }
 
 function detectCandlePattern(data) {
+  if (!data || !data.data || data.data.length === 0) {
+    console.warn('Invalid data passed to detectCandlePattern');
+    return 'Neutral'; // Default to 'Neutral' if data is invalid
+  }
+
   const lastCandle = data.data[data.data.length - 1];
   const [open, high, low, close] = [lastCandle[1], lastCandle[2], lastCandle[3], lastCandle[4]];
 
@@ -1049,72 +1054,59 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function analyzeMarket(panelId = '') {
+    const fetchBtn = document.getElementById(`fetchData${panelId}`);
+    if (!fetchBtn) return;
+  
     try {
+      showLoadingState(fetchBtn, true); // Disable button and show loading state
+  
       const suffix = panelId;
       const symbolId = `symbol${suffix}`;
       const intervalId = `interval${suffix}`;
       const limitId = `limit${suffix}`;
-      const fetchBtnId = `fetchData${suffix}`;
       const finalPredictionId = `finalPrediction${suffix}`;
       const indicatorValuesId = `indicatorValues${suffix}`;
-      
+  
       const symbolEl = document.getElementById(symbolId);
       const intervalEl = document.getElementById(intervalId);
       const limitEl = document.getElementById(limitId);
-      const fetchBtn = document.getElementById(fetchBtnId);
       const finalPredictionEl = document.getElementById(finalPredictionId);
       const indicatorValuesEl = document.getElementById(indicatorValuesId);
-      
-      if (!symbolEl || !intervalEl || !limitEl || !fetchBtn) {
-        console.error(`Required elements not found for panel ${panelId}`);
-        return;
+  
+      if (!symbolEl || !intervalEl || !limitEl) {
+        throw new Error(`Required elements not found for panel ${panelId}`);
       }
-      
-      showLoadingState(fetchBtn, true);
-      
+  
       const symbol = symbolEl.value.toUpperCase();
       const interval = intervalEl.value;
       const limit = Math.min(Math.max(parseInt(limitEl.value), 24), 1000);
-      
-      // Validate symbol
+  
       if (!symbol || symbol.length < 5) {
         throw new Error('Please enter a valid trading pair (e.g., BTCUSDT)');
       }
-      
+  
       const data = await fetchMarketData(symbol, interval, limit);
       const cryptoData = new CryptoData(data);
-      
+  
       const indicators = calculateIndicators(cryptoData);
       const probabilities = calculateProbabilities(indicators, cryptoData);
-      
-      // Update UI for this panel
+  
       updateUI(suffix, cryptoData, indicators, probabilities);
       updateChart(suffix, cryptoData, indicators);
       updateIndicatorValues(indicatorValuesEl, indicators, cryptoData);
       updateLastUpdated();
-      
-      // If sync is enabled, analyze other panels with the same symbol
+  
       if (isSyncEnabled) {
         syncPanelsWithMatchingPairs(suffix, symbol);
       }
-      
     } catch (error) {
       console.error("Analysis error:", error);
       const finalPredictionEl = document.getElementById(`finalPrediction${panelId}`);
       if (finalPredictionEl) {
         showErrorState(finalPredictionEl, error.message || "Failed to analyze market");
       }
-      
-      // Show more detailed error in console
-      if (error.message.includes("Instrument ID doesn't exist")) {
-        console.log('Common OKX trading pairs: BTC-USDT, ETH-USDT, SOL-USDT');
-        console.log('Make sure to use the correct format (BTCUSDT will be converted to BTC-USDT)');
-      }
     } finally {
-      const fetchBtn = document.getElementById(`fetchData${panelId}`);
-      if (fetchBtn) {
-        showLoadingState(fetchBtn, false);
-      }
+      showLoadingState(fetchBtn, false); // Re-enable button and hide loading state
     }
   }
   
@@ -1663,7 +1655,7 @@ function initSliderButton() {
 
     if (isChecked) {
       console.log('Slider is ON');
-      
+
       // Clear any existing interval to avoid duplicates
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
@@ -1678,11 +1670,11 @@ function initSliderButton() {
       }, 10000); // 10 seconds
     } else {
       console.log('Slider is OFF');
-      
+
       // Stop auto-refresh
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
+        autoRefreshInterval = null; // Reset the interval variable
       }
     }
   });
