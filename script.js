@@ -763,13 +763,13 @@ function calculateEnhancedPercentage(indicators) {
 }
 
 // Function to calculate indicators
-function calculateIndicators(data) {
-  const closes = data.closes;
-  const highs = data.highs;
-  const lows = data.lows;
-  const volumes = data.volumes;
-  const quoteVolumes = data.quoteVolumes;
-  const latest = data.getLatest();
+// function calculateIndicators(data) {
+//   const closes = data.closes;
+//   const highs = data.highs;
+//   const lows = data.lows;
+//   const volumes = data.volumes;
+//   const quoteVolumes = data.quoteVolumes;
+//   const latest = data.getLatest();
   
   // Moving Averages
   function sma(values, period) {
@@ -787,6 +787,30 @@ function calculateIndicators(data) {
     return emaValue;
   }
   
+  function calculateIndicators(data, previousIndicators = {}) {
+  const closes = data.closes;
+  const highs = data.highs;
+  const lows = data.lows;
+  const volumes = data.volumes;
+  const quoteVolumes = data.quoteVolumes;
+  const latest = data.getLatest();
+
+  // Moving Averages
+  function sma(values, period) {
+    if (values.length < period) return null;
+    return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+  }
+
+  function ema(values, period) {
+    if (values.length < period) return null;
+    const k = 2 / (period + 1);
+    let emaValue = sma(values.slice(0, period), period);
+    for (let i = period; i < values.length; i++) {
+      emaValue = values[i] * k + emaValue * (1 - k);
+    }
+    return emaValue;
+  }
+
   // RSI
   function calculateRSI(closes, period) {
     if (closes.length <= period) return 50;
@@ -800,7 +824,7 @@ function calculateIndicators(data) {
     const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
   }
-  
+
   // Support/Resistance
   const recentHigh = Math.max(...highs.slice(-20));
   const recentLow = Math.min(...lows.slice(-20));
@@ -816,22 +840,29 @@ function calculateIndicators(data) {
     '0.618': recentHigh - (recentHigh - recentLow) * 0.618,
     '0.786': recentHigh - (recentHigh - recentLow) * 0.786
   };
-  
+
   // Calculate MACD
   const macd = calculateMACD(closes);
-  
+
   // Calculate Bollinger Bands
   const bb = calculateBollingerBands(closes);
-  
+
   // Calculate ATR
   const atr = calculateATR(highs, lows, closes);
-  
+
   // Calculate VWAP
   const vwap = calculateVWAP(highs, lows, closes, volumes);
-  
-  const ema5Slope = (indicators.ema5 - previousIndicators.ema5) / previousIndicators.ema5;
-  const rsiChange = indicators.rsi6 - previousIndicators.rsi6;
-  const volumeDelta = indicators.volume - previousIndicators.volume;
+
+  // Temporal Context (if previousIndicators is provided)
+  const ema5Slope = previousIndicators.ema5
+    ? (ema(closes, 5) - previousIndicators.ema5) / previousIndicators.ema5
+    : null;
+  const rsiChange = previousIndicators.rsi6
+    ? calculateRSI(closes.slice(-7), 6) - previousIndicators.rsi6
+    : null;
+  const volumeDelta = previousIndicators.volume
+    ? latest.quoteVolume - previousIndicators.volume
+    : null;
 
   return {
     currentPrice: latest.price,
@@ -854,7 +885,10 @@ function calculateIndicators(data) {
     macd: macd,
     bollingerBands: bb,
     atr: atr,
-    vwap: vwap
+    vwap: vwap,
+    ema5Slope: ema5Slope,
+    rsiChange: rsiChange,
+    volumeDelta: volumeDelta
   };
 }
 
