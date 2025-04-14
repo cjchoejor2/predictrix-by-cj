@@ -3,7 +3,7 @@ let isFullscreen = false;
 let isSyncEnabled = true;
 let chartInstances = {};
 let predictionModel = null;
-let autoRefreshIntervals = {};
+let autoRefreshInterval = null; // Global variable to store the interval ID
 
 // Error handler - must be first
 window.addEventListener('error', (e) => {
@@ -1560,7 +1560,10 @@ function initSliderButton() {
     } else {
       console.log('Slider is OFF');
       // Stop auto-refresh
-      clearInterval(autoRefreshInterval);
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
     }
   });
 }
@@ -1621,10 +1624,4 @@ initSliderButton();
 // Initialize auto-refresh
 // initTickButton();
 // Auto-analyze all panels on load
-setTimeout(() => {
-  document.querySelectorAll('[id^="fetchData"]').forEach(btn => {
-    const panelId = btn.id.replace('fetchData', '');
-    analyzeMarket(panelId || '');
-  });
-}, 500);
 });
