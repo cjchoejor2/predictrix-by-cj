@@ -1540,32 +1540,28 @@ function setupAutoRefresh(panelId = '') {
   }
 }
 
-function initTickButton() {
-  const tickButtons = document.querySelectorAll('[id^="tickButton"]'); // Tick buttons have IDs like "tickButton1", "tickButton2", etc.
+// Initialize the slider button functionality
+function initSliderButton() {
+  const sliderButton = document.getElementById('syncToggle'); // Slider button ID
 
-  tickButtons.forEach(tickButton => {
-    const panelId = tickButton.id.replace('tickButton', ''); // Extract panel ID (e.g., "1", "2", etc.)
+  // Add change listener for the slider button
+  sliderButton.addEventListener('change', (event) => {
+    const isChecked = event.target.checked;
 
-    // Add change listener for the tick button
-    tickButton.addEventListener('change', () => {
-      const isTicked = tickButton.checked;
+    if (isChecked) {
+      console.log('Slider is ON');
+      // Execute "Analyze Market" for all app-contents once
+      analyzeAllMarkets();
 
-      if (isTicked) {
-        // Execute "Analyze Market" for all app-contents once
+      // Start auto-refresh every 10 seconds
+      autoRefreshInterval = setInterval(() => {
         analyzeAllMarkets();
-
-        // Start auto-refresh every 10 seconds
-        autoRefreshIntervals[panelId] = setInterval(() => {
-          analyzeAllMarkets();
-        }, 10000); // 10 seconds
-      } else {
-        // Stop auto-refresh
-        if (autoRefreshIntervals[panelId]) {
-          clearInterval(autoRefreshIntervals[panelId]);
-          delete autoRefreshIntervals[panelId];
-        }
-      }
-    });
+      }, 10000); // 10 seconds
+    } else {
+      console.log('Slider is OFF');
+      // Stop auto-refresh
+      clearInterval(autoRefreshInterval);
+    }
   });
 }
 // Initialize the slider button functionality
@@ -1621,6 +1617,7 @@ document.addEventListener('fullscreenchange', () => {
   document.body.classList.toggle('full-screen-active', isFullscreen);
 });
 
+initSliderButton();
 // Initialize auto-refresh
 // initTickButton();
 // Auto-analyze all panels on load
