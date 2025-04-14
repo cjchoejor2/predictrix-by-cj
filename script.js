@@ -27,7 +27,7 @@ async function loadModel() {
     model.add(tf.layers.dense({
       units: 10,
       activation: 'relu',
-      inputShape: [5]  // 5 features: EMA, RSI, MACD, BB position, volume ratio
+      inputShape: [7]  
     }));
     model.add(tf.layers.dense({
       units: 3,  // 3 outputs: bullish, neutral, bearish
@@ -49,7 +49,15 @@ async function loadModel() {
 }
 
 // Function to collect historical data for model training
-async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', '1d'], dataPoints = 1000) {
+// async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h', '1d']) {
+//   const dataPointMap = {
+//     '1m': 1500,
+//     '15m': 1000,
+//     '1h': 500,
+//     '4h': 300,
+//     '1d': 200
+//   };
+async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', '1d'], dataPoints = 2000) {
   try {
     console.log("Collecting training data...");
     const trainingData = [];
