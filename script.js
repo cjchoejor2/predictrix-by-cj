@@ -1516,29 +1516,29 @@ function showErrorState(predictionEl, message) {
 }
 
 // Function to setup auto-refresh for a panel
-function setupAutoRefresh(panelId = '') {
-  // Clear any existing interval for this panel
-  if (autoRefreshIntervals[panelId]) {
-    clearInterval(autoRefreshIntervals[panelId]);
-    delete autoRefreshIntervals[panelId];
-  }
+// function setupAutoRefresh(panelId = '') {
+//   // Clear any existing interval for this panel
+//   if (autoRefreshIntervals[panelId]) {
+//     clearInterval(autoRefreshIntervals[panelId]);
+//     delete autoRefreshIntervals[panelId];
+//   }
   
-  const autoRefreshEl = document.getElementById(`autoRefresh${panelId}`);
-  if (!autoRefreshEl) return;
+//   const autoRefreshEl = document.getElementById(`autoRefresh${panelId}`);
+//   if (!autoRefreshEl) return;
   
-  const isEnabled = autoRefreshEl.checked;
-  const intervalEl = document.getElementById(`refreshInterval${panelId}`);
-  const intervalValue = intervalEl ? parseInt(intervalEl.value) : 60;
+//   const isEnabled = autoRefreshEl.checked;
+//   const intervalEl = document.getElementById(`refreshInterval${panelId}`);
+//   const intervalValue = intervalEl ? parseInt(intervalEl.value) : 60;
   
-  if (isEnabled && intervalValue > 0) {
-    // Set new interval
-    autoRefreshIntervals[panelId] = setInterval(() => {
-      analyzeMarket(panelId);
-    }, intervalValue * 1000);
+//   if (isEnabled && intervalValue > 0) {
+//     // Set new interval
+//     autoRefreshIntervals[panelId] = setInterval(() => {
+//       analyzeMarket(panelId);
+//     }, intervalValue * 1000);
     
-    console.log(`Auto-refresh enabled for panel ${panelId || 'main'} every ${intervalValue} seconds`);
-  }
-}
+//     console.log(`Auto-refresh enabled for panel ${panelId || 'main'} every ${intervalValue} seconds`);
+//   }
+// }
 
 // Initialize the slider button functionality
 function initSliderButton() {
@@ -1550,6 +1550,12 @@ function initSliderButton() {
 
     if (isChecked) {
       console.log('Slider is ON');
+      
+      // Clear any existing interval to avoid duplicates
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+      }
+
       // Execute "Analyze Market" for all app-contents once
       analyzeAllMarkets();
 
@@ -1559,6 +1565,7 @@ function initSliderButton() {
       }, 10000); // 10 seconds
     } else {
       console.log('Slider is OFF');
+      
       // Stop auto-refresh
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
