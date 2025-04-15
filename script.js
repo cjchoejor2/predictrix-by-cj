@@ -115,7 +115,7 @@ async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h',
           detectCandlePattern(windowData) === 'Bullish Engulfing' ? 1 : 0
         ];
         
-        if (features.length !== 7) {
+        if (features.length !== 8) {
           console.error("Invalid feature vector:", features);
           continue;
         }
