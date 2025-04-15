@@ -150,8 +150,8 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     }
 
     // Validate feature and label dimensions
-    if (trainingData.features.some(f => f.length !== 7)) {
-      throw new Error("Feature vectors must have exactly 7 elements.");
+    if (trainingData.features.some(f => f.length !== 8)) {
+      throw new Error("Feature vectors must have exactly 8 elements.");
     }
     if (trainingData.labels.some(l => l.length !== 3)) {
       throw new Error("Labels must have exactly 3 elements.");
