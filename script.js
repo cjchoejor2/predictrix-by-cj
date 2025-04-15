@@ -27,7 +27,7 @@ async function loadModel() {
     model.add(tf.layers.dense({
       units: 10,
       activation: 'relu',
-      inputShape: [7]  
+      inputShape: [8]  
     }));
     model.add(tf.layers.dense({
       units: 3,  // 3 outputs: bullish, neutral, bearish
@@ -232,7 +232,7 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     });
 
     // Tensors
-    const xs = tf.tensor2d(normalizedFeatures, [normalizedFeatures.length, 7]); // Shape: [samples, 7]
+    const xs = tf.tensor2d(normalizedFeatures, [normalizedFeatures.length, 8]); // Shape: [samples, 7]
     const ys = tf.tensor2d(trainingData.labels, [trainingData.labels.length, 3]); // Shape: [samples, 3]
 
     const splitIdx = Math.floor(normalizedFeatures.length * 0.8);
