@@ -110,7 +110,7 @@ async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', 
           indicators.volume / indicators.avgVolume, // Volume ratio
           indicators.adx / 100, // ADX (trend strength)
           indicators.stochasticRSI, // Stochastic RSI
-          detectCandlePattern(data) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
+          detectCandlePattern(windowData) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
         ];
         
         // Determine outcome (label) based on future price movement
@@ -147,12 +147,20 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       throw new Error("No training data available");
     }
 
+    // Validate feature and label dimensions
+    if (trainingData.features.some(f => f.length !== 7)) {
+      throw new Error("Feature vectors must have exactly 7 elements.");
+    }
+    if (trainingData.labels.some(l => l.length !== 3)) {
+      throw new Error("Labels must have exactly 3 elements.");
+    }
+
     console.log(`Training model with ${trainingData.features.length} samples...`);
 
     // Normalize features between 0 and 1
     const features = trainingData.features;
     const featureCount = features[0].length;
-
+    
     const minVals = Array(featureCount).fill(Infinity);
     const maxVals = Array(featureCount).fill(-Infinity);
 
@@ -162,10 +170,33 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
         if (val > maxVals[i]) maxVals[i] = val;
       });
     });
+    const means = Array(featureCount).fill(0);
+    const stdDevs = Array(featureCount).fill(0);
+    // Calculate mean for each feature
+    features.forEach(f => {
+      f.forEach((val, i) => {
+        means[i] += val;
+      });
+    });
+    means.forEach((sum, i) => {
+      means[i] /= features.length;
+    });
 
-    const mean = features.reduce((sum, f) => sum + f, 0) / features.length;
-    const stdDev = Math.sqrt(features.reduce((sum, f) => sum + Math.pow(f - mean, 2), 0) / features.length);
-    const normalizedFeatures = features.map(f => (f - mean) / stdDev);
+    // Calculate standard deviation for each feature
+    features.forEach(f => {
+      f.forEach((val, i) => {
+        stdDevs[i] += Math.pow(val - means[i], 2);
+      });
+    });
+    stdDevs.forEach((sum, i) => {
+      stdDevs[i] = Math.sqrt(sum / features.length);
+    });
+
+    // Normalize features
+    const normalizedFeatures = features.map(f =>
+      f.map((val, i) => (val - means[i]) / (stdDevs[i] || 1)) // Avoid division by zero
+    );
+
 
     // Create a stronger model
     const model = tf.sequential();
@@ -199,8 +230,8 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     });
 
     // Tensors
-    const xs = tf.tensor2d(normalizedFeatures);
-    const ys = tf.tensor2d(trainingData.labels);
+    const xs = tf.tensor2d(normalizedFeatures, [normalizedFeatures.length, 7]); // Shape: [samples, 7]
+    const ys = tf.tensor2d(trainingData.labels, [trainingData.labels.length, 3]); // Shape: [samples, 3]
 
     const splitIdx = Math.floor(normalizedFeatures.length * 0.8);
 
@@ -1240,7 +1271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function calculateProbabilities(indicators) {
   if (predictionModel) {
     try {
-      // Prepare input data for TensorFlow model
+      // Prepare input data for TensorFlow model (ensure exactly 7 features)
       const inputData = [
         indicators.ema5 / indicators.ema20, // EMA ratio
         indicators.rsi6 / 100, // Normalized RSI
@@ -1253,7 +1284,7 @@ function calculateProbabilities(indicators) {
       ];
 
       // TensorFlow prediction
-      const tensorInput = tf.tensor2d([inputData]);
+      const tensorInput = tf.tensor2d([inputData]); // Shape: [1, 7]
       const prediction = predictionModel.predict(tensorInput);
       const probabilities = prediction.dataSync();
 
