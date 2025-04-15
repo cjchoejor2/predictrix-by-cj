@@ -57,7 +57,7 @@ async function loadModel() {
 //     '4h': 300,
 //     '1d': 200
 //   };
-async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', '1d'], dataPoints = 2000) {
+async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h', '1d'], dataPoints = 2000) {
   try {
     console.log("Collecting training data...");
     const trainingData = [];
@@ -66,57 +66,61 @@ async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', 
     for (const interval of intervals) {
       console.log(`Fetching ${interval} data for ${symbol}...`);
       
-      // Fetch historical data
       const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=${dataPoints}`;
       const response = await fetch(apiUrl);
-      
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       
       const data = await response.json();
-      
       if (data.code !== "0" || !data.data || data.data.length === 0) {
         console.warn(`No data available for ${symbol} at ${interval} timeframe`);
         continue;
       }
       
-      // Process the data
       const candles = data.data.map(item => [
-        parseInt(item[0]),     // timestamp
-        parseFloat(item[1]),   // open
-        parseFloat(item[2]),   // high
-        parseFloat(item[3]),   // low
-        parseFloat(item[4]),   // close
-        parseFloat(item[5]),   // volume
-        item[6],               // volume currency
-        parseFloat(item[7])    // quote volume
-      ]).reverse();            // OKX returns newest first
+        parseInt(item[0]), parseFloat(item[1]), parseFloat(item[2]),
+        parseFloat(item[3]), parseFloat(item[4]), parseFloat(item[5]),
+        item[6], parseFloat(item[7])
+      ]).reverse();
       
-      const cryptoData = new CryptoData(candles);
-      
-      // Calculate features and labels for each data point
-      // We'll use a sliding window approach
       for (let i = 30; i < candles.length - 10; i++) {
-        // Calculate indicators for current window
         const windowData = new CryptoData(candles.slice(0, i + 1));
         const indicators = calculateIndicators(windowData);
         
-        // Create feature vector
+        // Validate indicators
+        if (
+          !indicators.ema5 || !indicators.ema20 || !indicators.rsi6 ||
+          !indicators.macd || !indicators.bollingerBands || !indicators.volume ||
+          !indicators.avgVolume || !indicators.adx || !indicators.stochasticRSI
+        ) {
+          console.warn("Skipping data point due to missing indicators:", indicators);
+          continue;
+        }
+        
+        if (
+          !indicators.bollingerBands.lower || !indicators.bollingerBands.upper
+        ) {
+          console.warn("Skipping data point due to invalid Bollinger Bands:", indicators.bollingerBands);
+          continue;
+        }
+        
         const features = [
-          indicators.ema5 / indicators.ema20, // EMA ratio
-          indicators.rsi6 / 100, // Normalized RSI
-          indicators.macd.histogram, // MACD histogram
+          indicators.ema5 / indicators.ema20 || 0,
+          indicators.rsi6 / 100 || 0,
+          indicators.macd.histogram || 0,
           (indicators.currentPrice - indicators.bollingerBands.lower) / 
-          (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
-          indicators.volume / indicators.avgVolume, // Volume ratio
-          indicators.adx / 100, // ADX (trend strength)
-          indicators.stochasticRSI, // Stochastic RSI
-          detectCandlePattern(windowData) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
+          (indicators.bollingerBands.upper - indicators.bollingerBands.lower) || 0,
+          indicators.volume / indicators.avgVolume || 0,
+          indicators.adx / 100 || 0,
+          indicators.stochasticRSI || 0,
+          detectCandlePattern(windowData) === 'Bullish Engulfing' ? 1 : 0
         ];
         
-        // Determine outcome (label) based on future price movement
-        // Look 10 candles ahead to determine if price went up or down
-        const futurePriceChange = (candles[i + 10][4] - candles[i][4]) / candles[i][4] * 100;
+        if (features.length !== 7) {
+          console.error("Invalid feature vector:", features);
+          continue;
+        }
         
+        const futurePriceChange = (candles[i + 10][4] - candles[i][4]) / candles[i][4] * 100;
         let label;
         if (futurePriceChange > 1.0) {
           label = [1, 0, 0]; // Bullish
@@ -129,8 +133,6 @@ async function collectTrainingData(symbol, intervals = ['1m','15m', '1h', '4h', 
         trainingData.push(features);
         labels.push(label);
       }
-      
-      console.log(`Processed ${interval} data: ${trainingData.length} training samples`);
     }
     
     return { features: trainingData, labels: labels };
