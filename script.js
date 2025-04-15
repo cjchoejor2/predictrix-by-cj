@@ -880,6 +880,27 @@ function calculateEnhancedPercentage(indicators) {
     return 100 - (100 / (1 + rs));
   }
 
+  // Calculate Stochastic RSI
+  function calculateStochasticRSI(closes, period = 14, stochPeriod = 14) {
+    if (closes.length <= period + stochPeriod) return 50;
+    
+    // Calculate RSI values for the stoch period
+    const rsiValues = [];
+    for (let i = 0; i < stochPeriod; i++) {
+      rsiValues.push(calculateRSI(closes.slice(0, closes.length - i), period));
+    }
+    
+    const currentRSI = rsiValues[0];
+    const minRSI = Math.min(...rsiValues);
+    const maxRSI = Math.max(...rsiValues);
+    
+    // Avoid division by zero
+    if (maxRSI === minRSI) return 50;
+    
+    // Calculate Stochastic RSI
+    return ((currentRSI - minRSI) / (maxRSI - minRSI)) * 100;
+  }
+
   // Support/Resistance
   const recentHigh = Math.max(...highs.slice(-20));
   const recentLow = Math.min(...lows.slice(-20));
@@ -907,6 +928,12 @@ function calculateEnhancedPercentage(indicators) {
 
   // Calculate VWAP
   const vwap = calculateVWAP(highs, lows, closes, volumes);
+
+  // Calculate ADX - properly integrate the existing function
+  const adx = calculateADX(highs, lows, closes);
+
+  // Calculate Stochastic RSI
+  const stochasticRSI = calculateStochasticRSI(closes);
 
   // Temporal Context (if previousIndicators is provided)
   const ema5Slope = previousIndicators.ema5
@@ -941,11 +968,14 @@ function calculateEnhancedPercentage(indicators) {
     bollingerBands: bb,
     atr: atr,
     vwap: vwap,
+    adx: adx, // Added ADX calculation
+    stochasticRSI: stochasticRSI, // Added Stochastic RSI calculation
     ema5Slope: ema5Slope,
     rsiChange: rsiChange,
     volumeDelta: volumeDelta
   };
 }
+
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Try to load saved model first
