@@ -235,11 +235,20 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
 
     const splitIdx = Math.floor(normalizedFeatures.length * 0.8);
 
-    const trainXs = xs.slice([0, 0], [splitIdx, featureCount]);
-    const trainYs = ys.slice([0, 0], [splitIdx, 3]);
+    let trainXs, trainYs, valXs, valYs;
+    if (splitIdx === 0 || splitIdx === normalizedFeatures.length) {
+      console.warn("Not enough data for validation. Skipping validation metrics.");
+      trainXs = xs;
+      trainYs = ys;
+      valXs = null;
+      valYs = null;
+    } else {
+      trainXs = xs.slice([0, 0], [splitIdx, featureCount]);
+      trainYs = ys.slice([0, 0], [splitIdx, 3]);
 
-    const valXs = xs.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, featureCount]);
-    const valYs = ys.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, 3]);
+      valXs = xs.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, featureCount]);
+      valYs = ys.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, 3]);
+    }
 
     // Check validation data
     if (valXs.shape[0] === 0 || valYs.shape[0] === 0) {
