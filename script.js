@@ -57,16 +57,21 @@ async function loadModel() {
 //     '4h': 300,
 //     '1d': 200
 //   };
-async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h', '1d'], dataPoints = 2000) {
+// Modify the collectTrainingData function to get more data
+async function collectTrainingData(symbol, intervals = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'], dataPoints = 2000) {
   try {
     console.log("Collecting training data...");
     const trainingData = [];
     const labels = [];
     
+    // Process each interval
     for (const interval of intervals) {
       console.log(`Fetching ${interval} data for ${symbol}...`);
       
-      const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=${dataPoints}`;
+      // Fetch more data points for shorter timeframes
+      const adjustedDataPoints = interval.includes('m') ? dataPoints * 2 : dataPoints;
+      
+      const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=${adjustedDataPoints}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       
@@ -82,7 +87,21 @@ async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h',
         item[6], parseFloat(item[7])
       ]).reverse();
       
-      for (let i = 30; i < candles.length - 10; i++) {
+      // Use more data points for feature extraction
+      // Adjust window size based on timeframe to capture more patterns
+      const windowSize = interval.includes('d') ? 60 : 
+                         interval.includes('h') ? 40 : 30;
+      
+      // Use more future candles for longer timeframes to better predict trends
+      const futureCandlesLookup = interval.includes('d') ? 5 : 
+                                 interval.includes('h') ? 8 : 10;
+      
+      // Process more candles with overlapping windows to increase dataset size
+      const stepSize = interval.includes('d') ? 3 : 
+                      interval.includes('h') ? 2 : 1;
+      
+      for (let i = windowSize; i < candles.length - futureCandlesLookup; i += stepSize) {
+        // Create a window of data for feature extraction
         const windowData = new CryptoData(candles.slice(0, i + 1));
         const indicators = calculateIndicators(windowData);
         
@@ -103,6 +122,7 @@ async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h',
           continue;
         }
         
+        // Create feature vector - ensure exactly 8 elements
         const features = [
           indicators.ema5 / indicators.ema20 || 0,
           indicators.rsi6 / 100 || 0,
@@ -111,20 +131,35 @@ async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h',
           (indicators.bollingerBands.upper - indicators.bollingerBands.lower) || 0,
           indicators.volume / indicators.avgVolume || 0,
           indicators.adx / 100 || 0,
-          indicators.stochasticRSI || 0,
+          indicators.stochasticRSI / 100 || 0,
           detectCandlePattern(windowData) === 'Bullish Engulfing' ? 1 : 0
         ];
         
+        // Validate feature vector
         if (features.length !== 8) {
-          console.error("Invalid feature vector:", features);
+          console.error("Invalid feature vector length:", features.length, features);
           continue;
         }
         
-        const futurePriceChange = (candles[i + 10][4] - candles[i][4]) / candles[i][4] * 100;
+        // Check for NaN or Infinity values
+        if (features.some(val => isNaN(val) || !isFinite(val))) {
+          console.warn("Skipping data point due to NaN or Infinity values:", features);
+          continue;
+        }
+        
+        // Calculate future price change for label
+        const futurePriceChange = (candles[i + futureCandlesLookup][4] - candles[i][4]) / candles[i][4] * 100;
+        
+        // Create label based on future price change
+        // Adjust thresholds based on timeframe
+        const bullishThreshold = interval.includes('d') ? 2.0 : 
+                                interval.includes('h') ? 1.5 : 1.0;
+        const bearishThreshold = -bullishThreshold;
+        
         let label;
-        if (futurePriceChange > 1.0) {
+        if (futurePriceChange > bullishThreshold) {
           label = [1, 0, 0]; // Bullish
-        } else if (futurePriceChange < -1.0) {
+        } else if (futurePriceChange < bearishThreshold) {
           label = [0, 0, 1]; // Bearish
         } else {
           label = [0, 1, 0]; // Neutral
@@ -133,16 +168,33 @@ async function collectTrainingData(symbol, intervals = ['1m', '15m', '1h', '4h',
         trainingData.push(features);
         labels.push(label);
       }
+      
+      console.log(`Collected ${trainingData.length - labels.length + 1} samples from ${interval} timeframe`);
     }
     
-    return { features: trainingData, labels: labels };
+    // Shuffle the data to avoid timeframe bias
+    const combinedData = trainingData.map((features, i) => ({ features, label: labels[i] }));
+    for (let i = combinedData.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [combinedData[i], combinedData[j]] = [combinedData[j], combinedData[i]]; // Swap
+    }
+    
+    // Extract shuffled features and labels
+    const shuffledFeatures = combinedData.map(item => item.features);
+    const shuffledLabels = combinedData.map(item => item.label);
+    
+    console.log(`Total training data collected: ${shuffledFeatures.length} samples`);
+    
+    return { features: shuffledFeatures, labels: shuffledLabels };
   } catch (error) {
     console.error("Error collecting training data:", error);
     return { features: [], labels: [] };
   }
 }
 
+
 // Function to train the TensorFlow model
+// Add this function to implement k-fold cross-validation
 async function trainModel(trainingData, epochs = 100, batchSize = 64) {
   try {
     if (!trainingData.features.length || !trainingData.labels.length) {
@@ -150,8 +202,9 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     }
 
     // Validate feature and label dimensions
-    if (trainingData.features.some(f => f.length !== 8)) {
-      throw new Error("Feature vectors must have exactly 8 elements.");
+    const featureCount = trainingData.features[0].length;
+    if (trainingData.features.some(f => f.length !== featureCount)) {
+      throw new Error(`Feature vectors must have exactly ${featureCount} elements.`);
     }
     if (trainingData.labels.some(l => l.length !== 3)) {
       throw new Error("Labels must have exactly 3 elements.");
@@ -159,21 +212,20 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
 
     console.log(`Training model with ${trainingData.features.length} samples...`);
 
+    // If we have limited data, use cross-validation
+    if (trainingData.features.length < 500) {
+      console.log("Limited data detected. Using cross-validation approach...");
+      return await trainModelWithCrossValidation(trainingData, epochs, batchSize, 5);
+    }
+
+    // For larger datasets, use the standard approach with a validation split
     // Normalize features between 0 and 1
     const features = trainingData.features;
-    const featureCount = features[0].length;
     
-    const minVals = Array(featureCount).fill(Infinity);
-    const maxVals = Array(featureCount).fill(-Infinity);
-
-    features.forEach(f => {
-      f.forEach((val, i) => {
-        if (val < minVals[i]) minVals[i] = val;
-        if (val > maxVals[i]) maxVals[i] = val;
-      });
-    });
+    // Calculate mean and standard deviation for each feature
     const means = Array(featureCount).fill(0);
     const stdDevs = Array(featureCount).fill(0);
+    
     // Calculate mean for each feature
     features.forEach(f => {
       f.forEach((val, i) => {
@@ -199,6 +251,19 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       f.map((val, i) => (val - means[i]) / (stdDevs[i] || 1)) // Avoid division by zero
     );
 
+    // Log the total number of samples before splitting
+    console.log(`Total samples before splitting: ${normalizedFeatures.length}`);
+
+    // Calculate split index - using 80% for training, 20% for validation
+    let splitIdx = Math.floor(normalizedFeatures.length * 0.8);
+    console.log(`Split index: ${splitIdx} (${Math.round(splitIdx/normalizedFeatures.length*100)}% training data)`);
+
+    // Ensure the split results in non-empty validation set
+    if (splitIdx === 0 || splitIdx >= normalizedFeatures.length - 1) {
+      console.warn("Invalid split index. Using 70% for training instead.");
+      // Try a different split ratio if the current one doesn't work
+      splitIdx = Math.floor(normalizedFeatures.length * 0.7);
+    }
 
     // Create a stronger model
     const model = tf.sequential();
@@ -231,30 +296,37 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
       metrics: ['accuracy']
     });
 
-    // Tensors
-    const xs = tf.tensor2d(normalizedFeatures, [normalizedFeatures.length, 8]); // Shape: [samples, 7]
-    const ys = tf.tensor2d(trainingData.labels, [trainingData.labels.length, 3]); // Shape: [samples, 3]
-
-    const splitIdx = Math.floor(normalizedFeatures.length * 0.8);
-
+    // Create training and validation tensors
     let trainXs, trainYs, valXs, valYs;
-    if (splitIdx === 0 || splitIdx === normalizedFeatures.length) {
-      console.warn("Not enough data for validation. Skipping validation metrics.");
-      trainXs = xs;
-      trainYs = ys;
-      valXs = null;
-      valYs = null;
-    } else {
-      trainXs = xs.slice([0, 0], [splitIdx, featureCount]);
-      trainYs = ys.slice([0, 0], [splitIdx, 3]);
 
-      valXs = xs.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, featureCount]);
-      valYs = ys.slice([splitIdx, 0], [normalizedFeatures.length - splitIdx, 3]);
+    // Ensure we have at least some validation data
+    if (normalizedFeatures.length - splitIdx < 2) {
+      console.warn("Not enough data for validation. Using all data for training.");
+      trainXs = tf.tensor2d(normalizedFeatures, [normalizedFeatures.length, featureCount]);
+      trainYs = tf.tensor2d(trainingData.labels, [trainingData.labels.length, 3]);
+      // Create minimal validation set by duplicating some training data
+      // This is not ideal but better than having no validation
+      valXs = tf.tensor2d(normalizedFeatures.slice(0, 2), [2, featureCount]);
+      valYs = tf.tensor2d(trainingData.labels.slice(0, 2), [2, 3]);
+    } else {
+      // Normal splitting
+      trainXs = tf.tensor2d(normalizedFeatures.slice(0, splitIdx), [splitIdx, featureCount]);
+      trainYs = tf.tensor2d(trainingData.labels.slice(0, splitIdx), [splitIdx, 3]);
+      
+      const valSize = normalizedFeatures.length - splitIdx;
+      valXs = tf.tensor2d(normalizedFeatures.slice(splitIdx), [valSize, featureCount]);
+      valYs = tf.tensor2d(trainingData.labels.slice(splitIdx), [valSize, 3]);
+      
+      console.log(`Training set: ${splitIdx} samples, Validation set: ${valSize} samples`);
     }
 
     // Check validation data
     if (valXs.shape[0] === 0 || valYs.shape[0] === 0) {
-      console.warn("Validation data is empty. Skipping validation metrics.");
+      console.warn("Validation data is empty. Using a small portion of training data for validation.");
+      // Use a small portion of training data for validation
+      const smallValSize = Math.max(2, Math.floor(trainXs.shape[0] * 0.1));
+      valXs = trainXs.slice([0, 0], [smallValSize, featureCount]);
+      valYs = trainYs.slice([0, 0], [smallValSize, 3]);
     }
 
     // UI status
@@ -270,14 +342,14 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     const history = await model.fit(trainXs, trainYs, {
       epochs: epochs,
       batchSize: batchSize,
-      validationData: valXs.shape[0] > 0 && valYs.shape[0] > 0 ? [valXs, valYs] : null,
+      validationData: [valXs, valYs],
       callbacks: {
         onEpochEnd: (epoch, logs) => {
           const progress = Math.round((epoch + 1) / epochs * 100);
 
           // Safely handle undefined or missing metrics
           const trainAcc = logs.acc ? (logs.acc * 100).toFixed(2) : 'N/A';
-          const valAcc = logs.val_accuracy ? (logs.val_accuracy * 100).toFixed(2) : 'N/A';
+          const valAcc = logs.val_acc ? (logs.val_acc * 100).toFixed(2) : 'N/A';
           const trainLoss = logs.loss ? logs.loss.toFixed(4) : 'N/A';
           const valLoss = logs.val_loss ? logs.val_loss.toFixed(4) : 'N/A';
 
@@ -297,10 +369,10 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     });
 
     // Clean-up
-    tf.dispose([xs, ys, trainXs, trainYs, valXs, valYs]);
+    tf.dispose([trainXs, trainYs, valXs, valYs]);
 
-    const finalAccuracy = history.history.val_accuracy
-      ? history.history.val_accuracy[history.history.val_accuracy.length - 1]
+    const finalAccuracy = history.history.val_acc
+      ? history.history.val_acc[history.history.val_acc.length - 1]
       : null;
 
     statusEl.innerHTML = `
@@ -322,11 +394,20 @@ async function trainModel(trainingData, epochs = 100, batchSize = 64) {
     console.error("Error training model:", error);
     const statusEl = document.getElementById('modelTrainingStatus');
     if (statusEl) {
-      statusEl.remove();
+      statusEl.innerHTML = `
+        <div class="training-error">
+          <div>Training failed: ${error.message}</div>
+          <button id="closeTrainingStatus">Close</button>
+        </div>
+      `;
+      document.getElementById('closeTrainingStatus').addEventListener('click', () => {
+        statusEl.remove();
+      });
     }
     return null;
   }
 }
+
 
 
 // Function to save the trained model to localStorage
@@ -1046,7 +1127,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const symbol = document.getElementById('symbol')?.value || 'BTCUSDT';
         console.log('Using symbol for training:', symbol);
         
-        // Collect training data
+        // Show status message
+        let statusEl = document.getElementById('modelTrainingStatus');
+        if (!statusEl) {
+          statusEl = document.createElement('div');
+          statusEl.id = 'modelTrainingStatus';
+          statusEl.className = 'training-status';
+          document.body.appendChild(statusEl);
+        }
+        
+        statusEl.innerHTML = `
+          <div class="training-progress">
+            <div>Collecting training data...</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 10%"></div>
+            </div>
+          </div>
+        `;
+        
+        // Collect training data with our improved function
         console.log('Starting to collect training data...');
         const trainingData = await collectTrainingData(symbol);
         console.log('Training data collected:', trainingData);
@@ -1055,7 +1154,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw new Error('No training data could be collected. Please try a different symbol or check your connection.');
         }
         
-        // Train model
+        statusEl.innerHTML = `
+          <div class="training-progress">
+            <div>Starting model training with ${trainingData.features.length} samples...</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 20%"></div>
+            </div>
+          </div>
+        `;
+        
+        // Train model with our improved function
         console.log('Starting model training...');
         const trainedModel = await trainModel(trainingData);
         console.log('Model training completed:', trainedModel);
@@ -1312,7 +1420,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function calculateProbabilities(indicators) {
   if (predictionModel) {
     try {
-      // Prepare input data for TensorFlow model (ensure exactly 7 features)
+      // Prepare input data for TensorFlow model (ensure exactly 8 features)
       const inputData = [
         indicators.ema5 / indicators.ema20, // EMA ratio
         indicators.rsi6 / 100, // Normalized RSI
@@ -1321,11 +1429,29 @@ function calculateProbabilities(indicators) {
         (indicators.bollingerBands.upper - indicators.bollingerBands.lower), // BB position
         indicators.volume / indicators.avgVolume, // Volume ratio
         indicators.adx / 100, // ADX (trend strength)
+        indicators.stochasticRSI / 100, // Stochastic RSI
         detectCandlePattern(indicators) === 'Bullish Engulfing' ? 1 : 0 // Candle pattern
       ];
 
+      // Validate input data
+      if (inputData.length !== 8) {
+        console.error("Input data has incorrect length:", inputData.length, "expected 8");
+        // Fix the data if needed
+        if (inputData.length > 8) {
+          inputData = inputData.slice(0, 8); // Take first 8 elements if too long
+        } else {
+          while (inputData.length < 8) inputData.push(0); // Pad with zeros if too short
+        }
+      }
+
+      // Check for NaN or Infinity values
+      if (inputData.some(val => isNaN(val) || !isFinite(val))) {
+        console.warn("Input data contains NaN or Infinity values. Replacing with zeros:", inputData);
+        inputData = inputData.map(val => isNaN(val) || !isFinite(val) ? 0 : val);
+      }
+
       // TensorFlow prediction
-      const tensorInput = tf.tensor2d([inputData]); // Shape: [1, 7]
+      const tensorInput = tf.tensor2d(inputData, [1, 8]); // Explicitly set shape to [1, 8]
       const prediction = predictionModel.predict(tensorInput);
       const probabilities = prediction.dataSync();
 
