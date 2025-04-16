@@ -901,3 +901,237 @@ input:checked + .slider:before {
   color: var(--text-secondary);
   margin-bottom: 10px;
 }
+
+/* Add these styles to your existing styles.css file */
+
+/* Analysis mode container */
+.analysis-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  width: 100%;
+  height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+/* Chart controls */
+.chart-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-secondary);
+  padding: 12px 16px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+}
+
+.symbol-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.symbol-selector select {
+  background-color: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.drawing-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  background-color: var(--primary-light);
+}
+
+.tool-btn.active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.tool-btn.danger {
+  background-color: var(--bg-tertiary);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.tool-btn.danger:hover {
+  background-color: var(--danger);
+  color: white;
+}
+
+/* Advanced chart container */
+.advanced-chart-container {
+  width: 100%;
+  height: 500px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  position: relative;
+}
+
+/* Analysis panels */
+.analysis-panels {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.fib-levels-panel, .strategy-panel {
+  flex: 1;
+  min-width: 300px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 16px;
+  box-shadow: var(--box-shadow);
+}
+
+.fib-levels-panel h3, .strategy-panel h3 {
+  font-size: 16px;
+  margin-bottom: 12px;
+  color: var(--primary-light);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+}
+
+/* Fibonacci levels table */
+.fib-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fib-row {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fib-row.header {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fib-cell {
+  padding: 8px 4px;
+  flex: 1;
+}
+
+.fib-cell:first-child {
+  flex: 0.5;
+}
+
+/* Strategy table */
+.strategy-table {
+  width: 100%;
+}
+
+.strategy-row {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.strategy-label {
+  flex: 0.4;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.strategy-value {
+  flex: 0.6;
+  color: var(--text-primary);
+}
+
+/* Detailed analysis */
+.detailed-analysis {
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--box-shadow);
+  margin-top: 20px;
+}
+
+.detailed-analysis h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+  color: var(--primary-light);
+}
+
+.detailed-analysis p {
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.detailed-analysis strong {
+  color: var(--primary-light);
+  font-weight: 600;
+}
+
+.detailed-analysis ul {
+  margin-left: 20px;
+  margin-bottom: 16px;
+}
+
+.detailed-analysis li {
+  margin-bottom: 8px;
+}
+
+/* Highlight classes for the analysis */
+.bullish-text {
+  color: var(--success);
+}
+
+.bearish-text {
+  color: var(--danger);
+}
+
+.neutral-text {
+  color: var(--warning);
+}
+
+.highlight-text {
+  background-color: rgba(108, 92, 231, 0.2);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chart-controls {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .drawing-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .advanced-chart-container {
+    height: 350px;
+  }
+  
+  .analysis-panels {
+    flex-direction: column;
+  }
+}

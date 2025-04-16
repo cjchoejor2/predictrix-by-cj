@@ -9,10 +9,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <!-- Add TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
-  <!-- Add Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
-  <!-- Add Chart.js Annotation plugin -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0/dist/chartjs-plugin-annotation.min.js"></script>
+  <!-- Add TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Add drawing tools extension -->
+  <script src="https://unpkg.com/@devexperts/dxcharts-lite/dist/dxchart.min.js"></script>
 </head>
 <body class="full-screen">
   <div class="app-container">
@@ -45,15 +45,93 @@
       </div>
     </header>
 
-    <div class="empty-container">
-      <div class="empty-message">
-        <h2>Analysis Mode</h2>
-        <p>This is a clean workspace for your analysis.</p>
-        <p>Toggle the switch to return to the dashboard view.</p>
+    <div class="analysis-container">
+      <!-- Chart controls -->
+      <div class="chart-controls">
+        <div class="symbol-selector">
+          <select id="chartSymbol">
+            <option value="BTCUSDT">BTC/USDT</option>
+            <option value="ETHUSDT">ETH/USDT</option>
+            <option value="SOLUSDT">SOL/USDT</option>
+            <option value="XRPUSDT">XRP/USDT</option>
+            <option value="PIUSDT">PI/USDT</option>
+          </select>
+          <select id="chartInterval">
+            <option value="1m">1 minute</option>
+            <option value="5m">5 minutes</option>
+            <option value="15m" selected>15 minutes</option>
+            <option value="1h">1 hour</option>
+            <option value="4h">4 hours</option>
+            <option value="1d">1 day</option>
+          </select>
+        </div>
+        
+        <div class="drawing-tools">
+          <button id="tool-fib-retracement" class="tool-btn">Fib Retracement</button>
+          <button id="tool-fib-timezone" class="tool-btn">Fib Time Zone</button>
+          <button id="tool-fib-fan" class="tool-btn">Fib Fan</button>
+          <button id="tool-trend" class="tool-btn">Trend Line</button>
+          <button id="tool-clear" class="tool-btn danger">Clear All</button>
+        </div>
+        
+        <button id="analyzeChartBtn" class="analyze-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          ANALYZE CHART
+        </button>
+      </div>
+      
+      <!-- Main chart container -->
+      <div id="advancedChart" class="advanced-chart-container"></div>
+      
+      <!-- Analysis panels -->
+      <div class="analysis-panels">
+        <div class="fib-levels-panel">
+          <h3>Fibonacci Levels</h3>
+          <div class="fib-table" id="fibLevelsTable">
+            <div class="fib-row header">
+              <div class="fib-cell">Fib Level</div>
+              <div class="fib-cell">Price Area</div>
+              <div class="fib-cell">Action</div>
+            </div>
+            <!-- Will be populated dynamically -->
+          </div>
+        </div>
+        
+        <div class="strategy-panel">
+          <h3>Trading Strategy</h3>
+          <div class="strategy-table" id="strategyTable">
+            <div class="strategy-row">
+              <div class="strategy-label">Entry Points:</div>
+              <div class="strategy-value" id="entryPoints">Calculating...</div>
+            </div>
+            <div class="strategy-row">
+              <div class="strategy-label">Take Profit:</div>
+              <div class="strategy-value" id="takeProfitLevels">Calculating...</div>
+            </div>
+            <div class="strategy-row">
+              <div class="strategy-label">Stop Loss:</div>
+              <div class="strategy-value" id="stopLossLevels">Calculating...</div>
+            </div>
+            <div class="strategy-row">
+              <div class="strategy-label">Key Areas:</div>
+              <div class="strategy-value" id="keyAreas">Calculating...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Detailed analysis -->
+      <div class="detailed-analysis" id="detailedAnalysis">
+        <h3>🧠 Market Analysis</h3>
+        <p>Select a trading pair and click "Analyze Chart" to see detailed analysis.</p>
       </div>
     </div>
   </div>
   
+  <script src="analysis-mode.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
