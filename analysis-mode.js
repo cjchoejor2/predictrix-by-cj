@@ -1,12 +1,12 @@
 // Global variables
-let chart;
-let candleSeries;
+let chart = null;
+let candleSeries = null;
+let chartData = [];
 let currentSymbol = 'BTCUSDT';
 let currentInterval = '15m';
-let chartData = [];
 let drawingMode = null;
-let fibLevels = {};
 let activeTool = null;
+let fibLevels = {};
 
 // Initialize the chart when the DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
@@ -317,12 +317,14 @@ function initializeChart() {
   }
   
   // Load chart data from OKX API
-  async function loadChartData() {
+  // Load chart data from OKX API
+async function loadChartData() {
     try {
       showLoading(true);
       
       // Use the existing OKX API endpoint
       const apiUrl = `/.netlify/functions/okx-data?symbol=${currentSymbol}&interval=${currentInterval}&limit=500`;
+      console.log('Fetching chart data from:', apiUrl);
       
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -347,35 +349,54 @@ function initializeChart() {
         volume: parseFloat(item[5])
       })).reverse(); // OKX returns newest first
       
+      console.log('Chart data loaded:', chartData.length, 'candles');
+      
       // Set the data to the chart
-      candleSeries.setData(chartData);
-      
-      // Add volume data
-      const volumeSeries = chart.addHistogramSeries({
-        color: '#6C5CE7',
-        priceFormat: {
-          type: 'volume',
-        },
-        priceScaleId: '',
-        scaleMargins: {
-          top: 0.8,
-          bottom: 0,
-        },
-      });
-      
-      volumeSeries.setData(
-        chartData.map(item => ({
-          time: item.time,
-          value: item.volume,
-          color: item.close > item.open ? 'rgba(0, 184, 148, 0.5)' : 'rgba(214, 48, 49, 0.5)'
-        }))
-      );
+      if (candleSeries) {
+        candleSeries.setData(chartData);
+        
+        // Add volume data
+        try {
+          // Remove existing volume series if any
+          const existingVolumeSeries = chart.getSeries().find(s => s.priceScaleId === '');
+          if (existingVolumeSeries) {
+            chart.removeSeries(existingVolumeSeries);
+          }
+          
+          const volumeSeries = chart.addHistogramSeries({
+            color: '#6C5CE7',
+            priceFormat: {
+              type: 'volume',
+            },
+            priceScaleId: '',
+            scaleMargins: {
+              top: 0.8,
+              bottom: 0,
+            },
+          });
+          
+          volumeSeries.setData(
+            chartData.map(item => ({
+              time: item.time,
+              value: item.volume,
+              color: item.close > item.open ? 'rgba(0, 184, 148, 0.5)' : 'rgba(214, 48, 49, 0.5)'
+            }))
+          );
+        } catch (volumeError) {
+          console.error("Error adding volume data:", volumeError);
+          // Continue even if volume data fails
+        }
+        
+        // Fit the chart to the data
+        if (chart) {
+          chart.timeScale().fitContent();
+        }
+      } else {
+        console.error('Candle series not initialized');
+      }
       
       // Update last updated time
       updateLastUpdated();
-      
-      // Fit the chart to the data
-      chart.timeScale().fitContent();
       
       showLoading(false);
     } catch (error) {
@@ -384,6 +405,7 @@ function initializeChart() {
       showLoading(false);
     }
   }
+  
   
   // Update the Fibonacci levels table
   function updateFibLevelsTable() {
