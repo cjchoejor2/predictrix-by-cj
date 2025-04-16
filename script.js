@@ -1,9 +1,6 @@
 let isFullscreen = false;
-// Global variable to track synchronization state
-let isSyncEnabled = true;
 let chartInstances = {};
 let predictionModel = null;
-let autoRefreshInterval = null; // Global variable to store the interval ID
 
 // Error handler - must be first
 window.addEventListener('error', (e) => {
@@ -1070,21 +1067,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check if model needs update
   checkModelStatus();
 
-  // Initialize sync toggles
-  const syncToggles = document.querySelectorAll('[id^="syncToggle"]');
-  syncToggles.forEach(toggle => {
-    toggle.addEventListener('click', function() {
-      isSyncEnabled = !isSyncEnabled;
-      this.classList.toggle('active', isSyncEnabled);
-      
-      // Update all sync toggles to match
-      syncToggles.forEach(t => t.classList.toggle('active', isSyncEnabled));
-    });
-    
-    // Set initial state
-    toggle.classList.toggle('active', isSyncEnabled);
-  });
-
   // Initialize analyze buttons only once
   const fetchButtons = document.querySelectorAll('[id^="fetchData"]');
   fetchButtons.forEach(btn => {
@@ -1098,6 +1080,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleFullscreenBtn.addEventListener('click', toggleFullscreen);
   }
   
+    // Initialize the new mode toggle in the header
+  const modeToggle = document.getElementById('modeToggle');
+  if (modeToggle) {
+    modeToggle.addEventListener('change', function() {
+      if (this.checked) {
+        // Navigate to the empty page
+        window.location.href = 'empty-mode.html';
+      } else {
+        // Stay on the current page or navigate back to the main page
+        window.location.href = 'index.html';
+      }
+    });
+    
+    // Set initial state based on current page
+    modeToggle.checked = window.location.pathname.includes('empty-mode.html');
+  }
   // Initialize Train Model button
   const trainModelBtn = document.getElementById('trainModelBtn');
   if (trainModelBtn) {
@@ -1284,9 +1282,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       updateIndicatorValues(indicatorValuesEl, indicators, cryptoData);
       updateLastUpdated();
   
-      if (isSyncEnabled) {
-        syncPanelsWithMatchingPairs(suffix, symbol);
-      }
     } catch (error) {
       console.error("Analysis error:", error);
       const finalPredictionEl = document.getElementById(`finalPrediction${panelId}`);
@@ -1763,22 +1758,6 @@ function analyzeAllMarkets() {
   });
 }
 
-function syncPanelsWithMatchingPairs(currentPanelId, symbol) {
-  const symbolInputs = document.querySelectorAll('[id^="symbol"]'); // Trading pair inputs have IDs like "symbol1", "symbol2", etc.
-
-  symbolInputs.forEach(symbolInput => {
-    const panelId = symbolInput.id.replace('symbol', ''); // Extract panel ID
-
-    // Skip the current panel
-    if (panelId === currentPanelId) return;
-
-    // If the trading pair matches, execute "Analyze Market"
-    if (symbolInput.value.toUpperCase() === symbol.toUpperCase()) {
-      analyzeMarket(panelId);
-    }
-  });
-}
-
 function updateLastUpdated() {
   const lastUpdatedEls = document.querySelectorAll('[id^="lastUpdated"]');
   lastUpdatedEls.forEach(el => {
@@ -1826,110 +1805,6 @@ function showErrorState(predictionEl, message) {
   `;
 }
 
-// Function to setup auto-refresh for a panel
-// function setupAutoRefresh(panelId = '') {
-//   // Clear any existing interval for this panel
-//   if (autoRefreshIntervals[panelId]) {
-//     clearInterval(autoRefreshIntervals[panelId]);
-//     delete autoRefreshIntervals[panelId];
-//   }
-  
-//   const autoRefreshEl = document.getElementById(`autoRefresh${panelId}`);
-//   if (!autoRefreshEl) return;
-  
-//   const isEnabled = autoRefreshEl.checked;
-//   const intervalEl = document.getElementById(`refreshInterval${panelId}`);
-//   const intervalValue = intervalEl ? parseInt(intervalEl.value) : 60;
-  
-//   if (isEnabled && intervalValue > 0) {
-//     // Set new interval
-//     autoRefreshIntervals[panelId] = setInterval(() => {
-//       analyzeMarket(panelId);
-//     }, intervalValue * 1000);
-    
-//     console.log(`Auto-refresh enabled for panel ${panelId || 'main'} every ${intervalValue} seconds`);
-//   }
-// }
-
-// Initialize the slider button functionality
-function initSliderButton() {
-  const sliderButton = document.getElementById('syncToggle'); // Slider button ID
-
-  // Add change listener for the slider button
-  sliderButton.addEventListener('change', (event) => {
-    const isChecked = event.target.checked;
-
-    if (isChecked) {
-      console.log('Slider is ON');
-
-      // Clear any existing interval to avoid duplicates
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-      }
-
-      // Execute "Analyze Market" for all app-contents once
-      analyzeAllMarkets();
-
-      // Start auto-refresh every 10 seconds
-      autoRefreshInterval = setInterval(() => {
-        analyzeAllMarkets();
-      }, 10000); // 10 seconds
-    } else {
-      console.log('Slider is OFF');
-
-      // Stop auto-refresh
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null; // Reset the interval variable
-      }
-    }
-  });
-}
-// Initialize the slider button functionality
-// document.getElementById('syncToggle').addEventListener('change', (event) => {
-//   const isChecked = event.target.checked;
-
-//   if (isChecked) {
-//     console.log('Slider is ON');
-//     // Add logic to start auto-refresh or execute actions
-//     analyzeAllMarkets();
-//     autoRefreshInterval = setInterval(() => {
-//       analyzeAllMarkets();
-//     }, 10000); // 10 seconds
-//   } else {
-//     console.log('Slider is OFF');
-//     // Add logic to stop auto-refresh or actions
-//     clearInterval(autoRefreshInterval);
-//   }
-// });
-// // Initialize auto-refresh toggles
-// function initAutoRefresh() {
-//   const autoRefreshToggles = document.querySelectorAll('[id^="autoRefresh"]');
-//   autoRefreshToggles.forEach(toggle => {
-//     const panelId = toggle.id.replace('autoRefresh', '');
-    
-//     // Add change listener
-//     toggle.addEventListener('change', () => {
-//       setupAutoRefresh(panelId);
-//     });
-    
-//     // Also listen for interval changes
-//     const intervalEl = document.getElementById(`refreshInterval${panelId}`);
-//     if (intervalEl) {
-//       intervalEl.addEventListener('change', () => {
-//         if (toggle.checked) {
-//           setupAutoRefresh(panelId);
-//         }
-//       });
-//     }
-    
-//     // Setup initial state if enabled
-//     if (toggle.checked) {
-//       setupAutoRefresh(panelId);
-//     }
-//   });
-// }
-
 initFullscreenMode();
 document.addEventListener('fullscreenchange', () => {
   isFullscreen = !!document.fullscreenElement;
@@ -1938,7 +1813,7 @@ document.addEventListener('fullscreenchange', () => {
   document.body.classList.toggle('full-screen-active', isFullscreen);
 });
 
-initSliderButton();
+// initSliderButton();
 // Initialize auto-refresh
 // initTickButton();
 // Auto-analyze all panels on load

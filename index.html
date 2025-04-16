@@ -31,19 +31,34 @@
           </svg>
           Train Model
         </button>
+
+        <div class="mode-switch">
+          <label class="switch">
+            <input type="checkbox" id="modeToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="mode-label">Analysis Mode</span>
+        </div>
+        
+        <div class="last-updated" id="lastUpdated">Loading...</div>
+      </div>
         <div class="last-updated" id="lastUpdated">Loading...</div>
       </div>
     </header>
+
+    <div class="empty-container">
+      <div class="empty-message">
+        <h2>Analysis Mode</h2>
+        <p>This is a clean workspace for your analysis.</p>
+        <p>Toggle the switch to return to the dashboard view.</p>
+      </div>
+    </div>
+  </div>
 
     <div class="multi-column-container">
       <!-- Original Column -->
       <main class="app-content">
         <section class="control-panel">
-          <!-- Slider Button -->
-          <label class="switch">
-            <input type="checkbox" id="syncToggle">
-            <span class="slider"></span>
-          </label>
           
           <div class="input-group">
             <label for="symbol">TRADING PAIR</label>
