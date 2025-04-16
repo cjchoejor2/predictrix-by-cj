@@ -921,9 +921,11 @@ input:checked + .slider:before {
   justify-content: space-between;
   align-items: center;
   background-color: var(--bg-secondary);
-  padding: 12px 16px;
+  padding: 10px 16px; /* Reduced padding to decrease height */
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
+  height: 72px; /* Set explicit height */
+  box-sizing: border-box;
 }
 
 .symbol-selector {
@@ -943,8 +945,9 @@ input:checked + .slider:before {
 
 .drawing-tools {
   display: flex;
-  gap: 8px;
+  gap: 6px; /* Slightly reduced gap */
   flex-wrap: wrap;
+  max-width: calc(100% - 240px); /* Give more space for tools */
 }
 
 .tool-btn {
@@ -952,10 +955,11 @@ input:checked + .slider:before {
   color: var(--text-primary);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 6px 10px; /* Slightly reduced padding */
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .tool-btn:hover {
@@ -986,6 +990,18 @@ input:checked + .slider:before {
   border-radius: var(--border-radius);
   box-shadow: var(--box-shadow);
   position: relative;
+}
+
+#analyzeChartBtn {
+  width: 120px; /* Set fixed width */
+  height: 40px; /* Keep existing height */
+  white-space: nowrap; /* Prevent text wrapping */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 /* Analysis panels */

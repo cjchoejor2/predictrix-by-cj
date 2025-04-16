@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Initialize the TradingView chart
+// Initialize the TradingView chart
 function initializeChart() {
   const chartContainer = document.getElementById('advancedChart');
   
@@ -29,73 +30,74 @@ function initializeChart() {
     width: chartContainer.clientWidth,
     height: chartContainer.clientHeight,
     layout: {
-        backgroundColor: '#1E1E2D',
-        textColor: '#F5F6FA',
+      backgroundColor: '#1E1E2D',
+      textColor: '#F5F6FA',
+    },
+    grid: {
+      vertLines: {
+        color: 'rgba(255, 255, 255, 0.05)',
       },
-      grid: {
-        vertLines: {
-          color: 'rgba(255, 255, 255, 0.05)',
-        },
-        horzLines: {
-          color: 'rgba(255, 255, 255, 0.05)',
-        },
+      horzLines: {
+        color: 'rgba(255, 255, 255, 0.05)',
       },
-      crosshair: {
-        mode: LightweightCharts.CrosshairMode.Normal,
-        vertLine: {
-          width: 1,
-          color: 'rgba(108, 92, 231, 0.5)',
-          style: LightweightCharts.LineStyle.Dashed,
-        },
-        horzLine: {
-          width: 1,
-          color: 'rgba(108, 92, 231, 0.5)',
-          style: LightweightCharts.LineStyle.Dashed,
-        },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: {
+        width: 1,
+        color: 'rgba(108, 92, 231, 0.5)',
+        style: LightweightCharts.LineStyle.Dashed,
       },
-      timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        timeVisible: true,
-        secondsVisible: false,
+      horzLine: {
+        width: 1,
+        color: 'rgba(108, 92, 231, 0.5)',
+        style: LightweightCharts.LineStyle.Dashed,
       },
-      rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-      },
-    });
-    
-    // Create candlestick series
-    candleSeries = chart.addCandlestickSeries({
-      upColor: '#00B894',
-      downColor: '#D63031',
-      borderUpColor: '#00B894',
-      borderDownColor: '#D63031',
-      wickUpColor: 'rgba(0, 184, 148, 0.8)',
-      wickDownColor: 'rgba(214, 48, 49, 0.8)',
-    });
-    
-    // Add volume series
-    const volumeSeries = chart.addHistogramSeries({
-      color: '#6C5CE7',
-      priceFormat: {
-        type: 'volume',
-      },
-      priceScaleId: '',
-      scaleMargins: {
-        top: 0.8,
-        bottom: 0,
-      },
-    });
-    
-    // Make chart responsive
-    window.addEventListener('resize', () => {
-      if (chart) {
-        chart.resize(
-          chartContainer.clientWidth,
-          chartContainer.clientHeight
-        );
-      }
-    });
-  }
+    },
+    timeScale: {
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+    rightPriceScale: {
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+  });
+  
+  // Create candlestick series - fixed method name
+  candleSeries = chart.addCandlestickSeries({
+    upColor: '#00B894',
+    downColor: '#D63031',
+    borderUpColor: '#00B894',
+    borderDownColor: '#D63031',
+    wickUpColor: 'rgba(0, 184, 148, 0.8)',
+    wickDownColor: 'rgba(214, 48, 49, 0.8)',
+  });
+  
+  // Add volume series
+  const volumeSeries = chart.addHistogramSeries({
+    color: '#6C5CE7',
+    priceFormat: {
+      type: 'volume',
+    },
+    priceScaleId: '',
+    scaleMargins: {
+      top: 0.8,
+      bottom: 0,
+    },
+  });
+  
+  // Make chart responsive
+  window.addEventListener('resize', () => {
+    if (chart) {
+      chart.resize(
+        chartContainer.clientWidth,
+        chartContainer.clientHeight
+      );
+    }
+  });
+}
+
   
   // Set up event listeners
   function setupEventListeners() {

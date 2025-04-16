@@ -1067,6 +1067,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check if model needs update
   checkModelStatus();
 
+  const syncToggles = document.querySelectorAll('[id^="syncToggle"]');
+  syncToggles.forEach(toggle => {
+    toggle.addEventListener('click', function() {
+      isSyncEnabled = !isSyncEnabled;
+      this.classList.toggle('active', isSyncEnabled);
+      
+      // Update all sync toggles to match
+      syncToggles.forEach(t => t.classList.toggle('active', isSyncEnabled));
+    });
+    
+    // Set initial state
+    toggle.classList.toggle('active', isSyncEnabled);
+  });
+
   // Initialize analyze buttons only once
   const fetchButtons = document.querySelectorAll('[id^="fetchData"]');
   fetchButtons.forEach(btn => {
