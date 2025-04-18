@@ -2,11 +2,12 @@ import { OPENAI_API_KEY } from './config.js';
 // Global variables
 let tvWidget = null;
 let currentSymbol = 'BTCUSDT';
+let currentInterval = '15';
 
 // Initialize the TradingView chart when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize the TradingView widget
-  initializeTradingViewWidget();
+  // Initialize the TradingView widget with saved drawings
+  initTradingViewWithSavedDrawings();
   
   // Set up event listeners
   setupEventListeners();
@@ -18,20 +19,32 @@ document.addEventListener('DOMContentLoaded', () => {
   addAnalysisStyles();
 });
 
-// Initialize the TradingView widget
-function initializeTradingViewWidget() {
-  const container = document.getElementById('tradingview_chart_container');
+// Initialize the TradingView widget with saved drawings
+function initTradingViewWithSavedDrawings() {
+  const container = document.getElementById('advancedChart');
   if (!container) {
     console.error('TradingView container not found');
     return;
   }
   
+  // Get current symbol and interval from selectors
+  const symbolSelect = document.getElementById('chartSymbol');
+  const intervalSelect = document.getElementById('chartInterval');
+  
+  if (symbolSelect && intervalSelect) {
+    currentSymbol = symbolSelect.value;
+    currentInterval = intervalSelect.value;
+  }
+  
+  // Load saved drawings from localStorage
+  const savedDrawings = localStorage.getItem(`tv-drawings-${currentSymbol}-${currentInterval}`);
+  
   // Create the TradingView widget
   tvWidget = new TradingView.widget({
     width: container.offsetWidth,
     height: container.offsetHeight,
-    symbol: "OKEX:BTCUSDT", // Default symbol
-    interval: '15', // Default interval (15 minutes)
+    symbol: `OKEX:${currentSymbol}`, // Use current symbol
+    interval: currentInterval, // Use current interval
     timezone: "Etc/UTC",
     theme: "dark",
     style: "1", // Candles
@@ -48,10 +61,39 @@ function initializeTradingViewWidget() {
       "MACD@tv-basicstudies",
       "BB@tv-basicstudies"
     ],
-    container_id: "tradingview_chart_container",
-    // Use the chart ID from the URL you provided
-    // This will load the same chart layout
-    chart_url: "https://www.tradingview.com/chart/IC6vPTVf/",
+    container_id: "advancedChart",
+    saved_data: savedDrawings ? JSON.parse(savedDrawings) : null,
+    drawings_access: {
+      type: 'fullaccess',
+      tools: [
+        { name: "Trend Line" },
+        { name: "Fibonacci Retracement" },
+        { name: "Fibonacci Fan" },
+        { name: "Fibonacci Time Zone" },
+        { name: "Rectangle" },
+        { name: "Ellipse" },
+        { name: "Path" },
+        { name: "Polyline" },
+        { name: "Text" }
+      ]
+    }
+  });
+  
+  // Save drawings when they change
+  tvWidget.onChartReady(() => {
+    // Save drawings when chart is modified
+    tvWidget.subscribe('onAutoSaveNeeded', () => {
+      tvWidget.save(chartData => {
+        localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+      });
+    });
+    
+    // Also save when user manually adds a drawing
+    tvWidget.subscribe('onDrawingComplete', () => {
+      tvWidget.save(chartData => {
+        localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+      });
+    });
   });
   
   // Make the widget responsive
@@ -65,7 +107,7 @@ function initializeTradingViewWidget() {
         tvWidget.options.width = container.offsetWidth;
         tvWidget.options.height = container.offsetHeight;
         // Recreate widget only on significant size changes
-        initializeTradingViewWidget();
+        initTradingViewWithSavedDrawings();
       }
     }
   });
@@ -90,25 +132,99 @@ function setupEventListeners() {
     toggleFullscreenBtn.addEventListener('click', toggleFullscreen);
   }
   
-  // Trendict button
-  const trendictButton = document.getElementById('trendictButton');
-  if (trendictButton) {
-    trendictButton.addEventListener('click', analyzeTradingViewChart);
+  // Analyze button
+  const analyzeChartBtn = document.getElementById('analyzeChartBtn');
+  if (analyzeChartBtn) {
+    analyzeChartBtn.addEventListener('click', analyzeTradingViewChart);
   }
   
-  // Tab buttons
-  const tabButtons = document.querySelectorAll('.tab-button');
-  tabButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      // Remove active class from all buttons and content
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+  // Symbol and interval change handlers
+  const symbolSelect = document.getElementById('chartSymbol');
+  const intervalSelect = document.getElementById('chartInterval');
+  
+  if (symbolSelect) {
+    symbolSelect.addEventListener('change', () => {
+      // Save current drawings before changing symbol
+      if (tvWidget) {
+        tvWidget.save(chartData => {
+          localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+        });
+      }
       
-      // Add active class to clicked button and corresponding content
-      this.classList.add('active');
-      const tabId = this.getAttribute('data-tab');
-      document.getElementById(tabId).classList.add('active');
+      // Update current symbol
+      currentSymbol = symbolSelect.value;
+      
+      // Reinitialize with new symbol
+      if (tvWidget && tvWidget.activeChart) {
+        tvWidget.activeChart().setSymbol(`OKEX:${currentSymbol}`, () => {
+          // Load saved drawings for new symbol/interval combination
+          const savedDrawings = localStorage.getItem(`tv-drawings-${currentSymbol}-${currentInterval}`);
+          if (savedDrawings) {
+            tvWidget.load(JSON.parse(savedDrawings));
+          }
+        });
+      }
     });
+  }
+  
+  if (intervalSelect) {
+    intervalSelect.addEventListener('change', () => {
+      // Save current drawings before changing interval
+      if (tvWidget) {
+        tvWidget.save(chartData => {
+          localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+        });
+      }
+      
+      // Update current interval
+      currentInterval = intervalSelect.value;
+      
+      // Reinitialize with new interval
+      if (tvWidget && tvWidget.activeChart) {
+        tvWidget.activeChart().setResolution(currentInterval, () => {
+          // Load saved drawings for new symbol/interval combination
+          const savedDrawings = localStorage.getItem(`tv-drawings-${currentSymbol}-${currentInterval}`);
+          if (savedDrawings) {
+            tvWidget.load(JSON.parse(savedDrawings));
+          }
+        });
+      }
+    });
+  }
+  
+  // Drawing tool buttons
+  setupDrawingTools();
+}
+
+// Setup drawing tools
+function setupDrawingTools() {
+  const toolButtons = {
+    'tool-fib-retracement': 'FibRetracement',
+    'tool-fib-timezone': 'FibTimeZone',
+    'tool-fib-fan': 'FibFan',
+    'tool-trend': 'TrendLine',
+    'tool-clear': 'clear'
+  };
+  
+  Object.entries(toolButtons).forEach(([buttonId, toolName]) => {
+    const button = document.getElementById(buttonId);
+    if (button) {
+      button.addEventListener('click', () => {
+        if (tvWidget && tvWidget.activeChart) {
+          if (toolName === 'clear') {
+            // Clear all drawings
+            tvWidget.activeChart().removeAllShapes();
+            tvWidget.activeChart().removeAllStudies();
+            
+            // Clear from localStorage
+            localStorage.removeItem(`tv-drawings-${currentSymbol}-${currentInterval}`);
+          } else {
+            // Activate drawing tool
+            tvWidget.activeChart().createDrawing(toolName);
+          }
+        }
+      });
+    }
   });
 }
 
@@ -137,30 +253,27 @@ function updateLastUpdated() {
 async function analyzeTradingViewChart() {
   try {
     // Show loading state
-    const trendictButton = document.getElementById('trendictButton');
-    if (trendictButton) {
-      trendictButton.disabled = true;
-      trendictButton.innerHTML = `
+    const analyzeChartBtn = document.getElementById('analyzeChartBtn');
+    if (analyzeChartBtn) {
+      analyzeChartBtn.disabled = true;
+      analyzeChartBtn.innerHTML = `
         <div class="loading-spinner"></div>
         Analyzing...
       `;
     }
     
-    // Capture screenshot
-    const chartImageData = await captureChartScreenshot();
-    
     // Analyze the chart with AI
-    await analyzeChartWithAI(chartImageData);
+    await analyzeChartWithAI();
     
     // Reset button state
-    if (trendictButton) {
-      trendictButton.disabled = false;
-      trendictButton.innerHTML = `
+    if (analyzeChartBtn) {
+      analyzeChartBtn.disabled = false;
+      analyzeChartBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
           <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        Trendict
+        ANALYZE
       `;
     }
     
@@ -168,15 +281,15 @@ async function analyzeTradingViewChart() {
     console.error('Error in chart analysis:', error);
     
     // Reset button state
-    const trendictButton = document.getElementById('trendictButton');
-    if (trendictButton) {
-      trendictButton.disabled = false;
-      trendictButton.innerHTML = `
+    const analyzeChartBtn = document.getElementById('analyzeChartBtn');
+    if (analyzeChartBtn) {
+      analyzeChartBtn.disabled = false;
+      analyzeChartBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
           <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        Trendict
+        ANALYZE
       `;
     }
     
@@ -186,44 +299,128 @@ async function analyzeTradingViewChart() {
 }
 
 // Function to analyze the chart using ChatGPT
-async function analyzeChartWithAI(chartImageData) {
+async function analyzeChartWithAI() {
   try {
     // Show loading state
     showAnalysisLoading(true);
     
-    // Get current symbol and timeframe from TradingView widget
-    let symbol = 'BTCUSDT';
-    let interval = '15';
+    // Get current symbol and timeframe
+    const symbol = document.getElementById('chartSymbol').value;
+    const interval = document.getElementById('chartInterval').value;
     
-    try {
-      if (tvWidget && tvWidget.activeChart) {
-        symbol = tvWidget.activeChart().symbol() || 'BTCUSDT';
-        interval = tvWidget.activeChart().resolution() || '15';
+    // Extract data from TradingView chart
+    let chartData = {};
+    if (tvWidget && tvWidget.activeChart) {
+      try {
+        // Get visible series data
+        const symbolInfo = tvWidget.activeChart().symbolInfo();
+        const visibleRange = tvWidget.activeChart().getVisibleRange();
+        const priceScale = tvWidget.activeChart().priceScale();
+        
+        // Get studies/indicators on the chart
+        const studies = tvWidget.activeChart().getAllStudies();
+        const studyNames = studies.map(s => s.name).join(", ");
+        
+        // Get price data if available
+        chartData = {
+          symbol: symbolInfo.name,
+          interval: interval,
+          currentPrice: symbolInfo.last || "Unknown",
+          priceChange: symbolInfo.change || "Unknown",
+          percentChange: symbolInfo.change_percent || "Unknown",
+          volume: symbolInfo.volume || "Unknown",
+          indicators: studyNames || "None",
+          timeframe: `${visibleRange.from} to ${visibleRange.to}`,
+          trend: symbolInfo.last > symbolInfo.prev_close ? "bullish" : "bearish"
+        };
+      } catch (e) {
+        console.warn('Could not extract all chart data:', e);
       }
-    } catch (e) {
-      console.warn('Could not get symbol/interval from TradingView widget:', e);
     }
     
-    // Prepare the prompt for ChatGPT
+    // Fetch additional OHLCV data using your existing API
+    const apiUrl = `/.netlify/functions/okx-data?symbol=${symbol}&interval=${interval}&limit=100`;
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+    
+    const data = await response.json();
+    if (data.code !== "0" || !data.data || data.data.length === 0) {
+      throw new Error('No candle data available for this pair');
+    }
+    
+    // Process the candle data
+    const candles = data.data.map(item => ({
+      timestamp: new Date(parseInt(item[0])).toISOString(),
+      open: parseFloat(item[1]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+      close: parseFloat(item[4]),
+      volume: parseFloat(item[5])
+    })).reverse();
+    
+    // Calculate some basic indicators
+    const closes = candles.map(c => c.close);
+    const highs = candles.map(c => c.high);
+    const lows = candles.map(c => c.low);
+    
+    // Simple Moving Averages
+    const sma20 = calculateSMA(closes, 20);
+    const sma50 = calculateSMA(closes, 50);
+    
+    // RSI
+    const rsi14 = calculateRSI(closes, 14);
+    
+    // Support and resistance levels (simple implementation)
+    const recentHigh = Math.max(...highs.slice(-30));
+    const recentLow = Math.min(...lows.slice(-30));
+    
+    // Identify key price levels
+    const currentPrice = closes[closes.length - 1];
+    const priceRange = recentHigh - recentLow;
+    const keyLevels = [
+      { level: recentHigh, type: "resistance", significance: "high" },
+      { level: recentLow, type: "support", significance: "high" },
+      { level: recentLow + priceRange * 0.382, type: "fibonacci", significance: "medium" },
+      { level: recentLow + priceRange * 0.618, type: "fibonacci", significance: "medium" }
+    ];
+    
+    // Prepare detailed chart data for GPT
+    const detailedChartData = {
+      ...chartData,
+      candles: candles.slice(-10), // Send only the last 10 candles to save tokens
+      indicators: {
+        sma20,
+        sma50,
+        rsi14
+      },
+      keyLevels: keyLevels.map(l => ({
+        price: l.level.toFixed(2),
+        type: l.type,
+        significance: l.significance
+      }))
+    };
+    
+    // Create a prompt for GPT-3.5
     const prompt = `
-      Analyze this cryptocurrency chart of ${symbol} on the ${interval} timeframe.
+      You are a professional crypto market analyst. I'm providing you with data from a TradingView chart for ${symbol} on the ${interval} timeframe.
       
-      The chart includes my technical analysis drawings. Based on these drawings and the price action:
+      Please analyze this data and provide a detailed technical analysis including:
+      1. Overall market direction (bullish, bearish, or neutral)
+      2. Key support and resistance levels
+      3. Entry points for potential trades
+      4. Take profit targets
+      5. Stop loss recommendations
+      6. Risk/reward ratio
       
-      1. Identify the overall trend direction (bullish, bearish, or neutral)
-      2. Suggest optimal entry points for both long and short positions
-      3. Recommend take profit levels (at least 2 levels)
-      4. Recommend stop loss levels
-      5. Identify key support and resistance levels
-      6. Calculate the risk/reward ratio
-      7. Provide a brief reasoning for your analysis
+      Here's the chart data:
+      ${JSON.stringify(detailedChartData, null, 2)}
       
-      Format your response as JSON with the following structure:
+      Format your response as a JSON object with the following structure:
       {
         "direction": "bullish/bearish/neutral",
         "entryPoints": ["price1", "price2"],
         "takeProfitLevels": ["tp1", "tp2", "tp3"],
-                "stopLossLevels": ["sl1"],
+        "stopLossLevels": ["sl1"],
         "riskReward": "1:X",
         "keyLevels": [
           {"type": "support/resistance/fib", "price": "value", "significance": "high/medium/low"}
@@ -235,75 +432,53 @@ async function analyzeChartWithAI(chartImageData) {
     // Call the OpenAI API
     const apiKey = OPENAI_API_KEY;
     
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "gpt-4-vision-preview",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                { type: "image_url", image_url: { url: chartImageData } }
-              ]
-            }
-          ],
-          max_tokens: 1000
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`);
-      }
-      
-      const data = await response.json();
-      const analysisText = data.choices[0].message.content;
-      
-      // Parse the JSON response
-      try {
-        const analysisData = JSON.parse(analysisText);
-        updateAnalysisUI(analysisData);
-      } catch (parseError) {
-        console.error('Error parsing JSON from OpenAI:', parseError);
-        console.log('Raw response:', analysisText);
-        
-        // Try to extract JSON from the text if it's not pure JSON
-        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            const extractedJson = jsonMatch[0];
-            const analysisData = JSON.parse(extractedJson);
-            updateAnalysisUI(analysisData);
-          } catch (e) {
-            throw new Error('Could not parse analysis results. The AI response was not in the expected format.');
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "user",
+            content: prompt
           }
-        } else {
+        ],
+        max_tokens: 1000
+      })
+    });
+    
+    if (!openaiResponse.ok) {
+      const errorData = await openaiResponse.json();
+      throw new Error(`OpenAI API error: ${errorData.error?.message || openaiResponse.statusText}`);
+    }
+    
+    const gptData = await openaiResponse.json();
+    const analysisText = gptData.choices[0].message.content;
+    
+    // Parse the JSON response
+    try {
+      const analysisData = JSON.parse(analysisText);
+      updateAnalysisUI(analysisData);
+    } catch (parseError) {
+      console.error('Error parsing JSON from OpenAI:', parseError);
+      console.log('Raw response:', analysisText);
+      
+      // Try to extract JSON from the text if it's not pure JSON
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const extractedJson = jsonMatch[0];
+          const analysisData = JSON.parse(extractedJson);
+          updateAnalysisUI(analysisData);
+        } catch (e) {
           throw new Error('Could not parse analysis results. The AI response was not in the expected format.');
         }
+      } else {
+        throw new Error('Could not parse analysis results. The AI response was not in the expected format.');
       }
-    } catch (apiError) {
-      console.error('OpenAI API error:', apiError);
-      
-      // If API call fails, use a fallback analysis
-      const fallbackAnalysis = {
-        direction: "neutral",
-        entryPoints: ["Current market price"],
-        takeProfitLevels: ["API call failed - use TradingView tools"],
-        stopLossLevels: ["API call failed - use TradingView tools"],
-        riskReward: "N/A",
-        keyLevels: [
-          {"type": "note", "price": "N/A", "significance": "high"}
-        ],
-        reasoning: "Unable to analyze chart with AI. Please use TradingView's built-in tools for analysis. Error: " + apiError.message
-      };
-      
-      updateAnalysisUI(fallbackAnalysis);
     }
     
     showAnalysisLoading(false);
@@ -315,355 +490,275 @@ async function analyzeChartWithAI(chartImageData) {
   }
 }
 
-// Function to update the analysis UI with the results
+// Helper functions for technical indicators
+function calculateSMA(values, period) {
+  if (values.length < period) return null;
+  return values.slice(-period).reduce((sum, val) => sum + val, 0) / period;
+}
+
+function calculateRSI(closes, period) {
+  if (closes.length <= period) return 50;
+  let gains = 0, losses = 0;
+  
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff;
+    else losses -= diff;
+  }
+  
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  
+  if (avgLoss === 0) return 100;
+  
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+// Update the UI with analysis results
 function updateAnalysisUI(analysisData) {
-  // Update timestamp
-  const timestampEl = document.getElementById('analysisTimestamp');
-  if (timestampEl) {
-    timestampEl.textContent = `Analyzed at ${new Date().toLocaleTimeString()}`;
-  }
-  
-  // Update trading plan tab
-  document.getElementById('tradeDirection').textContent = analysisData.direction || '-';
-  document.getElementById('entryPoints').textContent = (analysisData.entryPoints || []).join(', ') || '-';
-  document.getElementById('takeProfitLevels').textContent = (analysisData.takeProfitLevels || []).join(', ') || '-';
-  document.getElementById('stopLossLevels').textContent = (analysisData.stopLossLevels || []).join(', ') || '-';
-  document.getElementById('riskReward').textContent = analysisData.riskReward || '-';
-  
-  // Update key levels tab
-  const keyLevelsTable = document.getElementById('keyLevelsTable');
-  if (keyLevelsTable) {
-    // Clear existing rows except header
-    while (keyLevelsTable.rows.length > 1) {
-      keyLevelsTable.deleteRow(1);
+  // Update Fibonacci Levels table
+  const fibLevelsTable = document.getElementById('fibLevelsTable');
+  if (fibLevelsTable && analysisData.keyLevels) {
+    // Clear existing content except header
+    const header = fibLevelsTable.querySelector('.fib-row.header');
+    fibLevelsTable.innerHTML = '';
+    if (header) {
+      fibLevelsTable.appendChild(header);
     }
     
-    // Add new rows
-    if (analysisData.keyLevels && analysisData.keyLevels.length > 0) {
-      analysisData.keyLevels.forEach(level => {
-        const row = keyLevelsTable.insertRow();
-        
-        const typeCell = row.insertCell();
-        typeCell.textContent = level.type || '-';
-        
-        const priceCell = row.insertCell();
-        priceCell.textContent = level.price || '-';
-        
-        const significanceCell = row.insertCell();
-        significanceCell.textContent = level.significance || '-';
-        
-        // Add color based on type
-        if (level.type && level.type.toLowerCase().includes('support')) {
-          typeCell.classList.add('support-text');
-        } else if (level.type && level.type.toLowerCase().includes('resistance')) {
-          typeCell.classList.add('resistance-text');
-        } else if (level.type && level.type.toLowerCase().includes('fib')) {
-          typeCell.classList.add('fib-text');
-        }
-        
-        // Add color based on significance
-        if (level.significance && level.significance.toLowerCase() === 'high') {
-          significanceCell.classList.add('high-significance');
-        }
-      });
-    } else {
-      const row = keyLevelsTable.insertRow();
-      const cell = row.insertCell();
-      cell.colSpan = 3;
-      cell.textContent = 'No key levels identified';
-      cell.style.textAlign = 'center';
-    }
-  }
-  
-  // Update reasoning tab
-  const reasoningEl = document.getElementById('analysisReasoning');
-  if (reasoningEl) {
-    reasoningEl.textContent = analysisData.reasoning || 'No reasoning provided';
-  }
-}
-
-// Function to show loading state in the analysis UI
-function showAnalysisLoading(isLoading) {
-  const elements = [
-    'tradeDirection', 'entryPoints', 'takeProfitLevels', 
-    'stopLossLevels', 'riskReward', 'analysisReasoning'
-  ];
-  
-  elements.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      if (isLoading) {
-        el.innerHTML = `<div class="loading-indicator"><div class="loading-spinner"></div>Analyzing...</div>`;
-      }
-    }
-  });
-  
-  // Also update the key levels table
-  const keyLevelsTable = document.getElementById('keyLevelsTable');
-  if (keyLevelsTable && isLoading) {
-    // Clear existing rows except header
-    while (keyLevelsTable.rows.length > 1) {
-      keyLevelsTable.deleteRow(1);
-    }
-    
-    // Add loading row
-    const row = keyLevelsTable.insertRow();
-    const cell = row.insertCell();
-    cell.colSpan = 3;
-    cell.innerHTML = `<div class="loading-indicator"><div class="loading-spinner"></div>Analyzing...</div>`;
-    cell.style.textAlign = 'center';
-  }
-}
-
-// Function to show error in the analysis UI
-function showAnalysisError(errorMessage) {
-  const elements = [
-    'tradeDirection', 'entryPoints', 'takeProfitLevels', 
-    'stopLossLevels', 'riskReward'
-  ];
-  
-  elements.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.textContent = 'Error';
-      el.classList.add('error-text');
-    }
-  });
-  
-  // Update reasoning with error message
-  const reasoningEl = document.getElementById('analysisReasoning');
-  if (reasoningEl) {
-    reasoningEl.innerHTML = `<div class="error-message">Error analyzing chart: ${errorMessage}</div>`;
-  }
-  
-  // Update timestamp
-  const timestampEl = document.getElementById('analysisTimestamp');
-  if (timestampEl) {
-    timestampEl.textContent = `Analysis failed at ${new Date().toLocaleTimeString()}`;
-  }
-}
-
-// Function to take a screenshot of the TradingView chart
-async function captureChartScreenshot() {
-  return new Promise((resolve, reject) => {
-    try {
-      // First, try to use TradingView's built-in screenshot functionality
-      if (tvWidget && tvWidget.activeChart && typeof tvWidget.activeChart().takeScreenshot === 'function') {
-        tvWidget.activeChart().takeScreenshot().then(resolve).catch(error => {
-          console.warn('TradingView screenshot failed, falling back to canvas capture:', error);
-          captureWithCanvas();
-        });
-        return;
+    // Add new levels
+    analysisData.keyLevels.forEach(level => {
+      const row = document.createElement('div');
+      row.className = 'fib-row';
+      
+      const typeCell = document.createElement('div');
+      typeCell.className = 'fib-cell';
+      typeCell.textContent = level.type.charAt(0).toUpperCase() + level.type.slice(1);
+      
+      const priceCell = document.createElement('div');
+      priceCell.className = 'fib-cell';
+      priceCell.textContent = level.price;
+      
+      const actionCell = document.createElement('div');
+      actionCell.className = 'fib-cell';
+      
+      if (level.type === 'support') {
+        actionCell.textContent = 'Buy near';
+        actionCell.style.color = 'var(--success)';
+      } else if (level.type === 'resistance') {
+        actionCell.textContent = 'Sell near';
+        actionCell.style.color = 'var(--danger)';
       } else {
-        captureWithCanvas();
+        actionCell.textContent = 'Watch for reversal';
       }
       
-      function captureWithCanvas() {
-        // Fallback: Use html2canvas to take a screenshot
-        if (typeof html2canvas !== 'function') {
-          // If html2canvas is not available, load it dynamically
-          const script = document.createElement('script');
-          script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
-          script.onload = () => {
-            captureWithHtml2Canvas();
-          };
-          script.onerror = () => {
-            reject(new Error('Failed to load html2canvas library'));
-          };
-          document.head.appendChild(script);
-        } else {
-          captureWithHtml2Canvas();
-        }
-      }
+      row.appendChild(typeCell);
+      row.appendChild(priceCell);
+      row.appendChild(actionCell);
       
-      function captureWithHtml2Canvas() {
-        const chartContainer = document.getElementById('tradingview_chart_container');
-        if (!chartContainer) {
-          reject(new Error('Chart container not found'));
-          return;
-        }
-        
-        html2canvas(chartContainer, {
-          allowTaint: true,
-          useCORS: true,
-          backgroundColor: '#1E1E2D'
-        }).then(canvas => {
-          const imageData = canvas.toDataURL('image/png');
-          resolve(imageData);
-        }).catch(error => {
-          console.error('html2canvas error:', error);
-          reject(new Error('Failed to capture chart screenshot'));
-        });
-      }
-    } catch (error) {
-      reject(error);
-    }
-  });
+      fibLevelsTable.appendChild(row);
+    });
+  }
+  
+  // Update Trading Strategy panel
+  const entryPointsEl = document.getElementById('entryPoints');
+  const takeProfitLevelsEl = document.getElementById('takeProfitLevels');
+  const stopLossLevelsEl = document.getElementById('stopLossLevels');
+  const keyAreasEl = document.getElementById('keyAreas');
+  
+  if (entryPointsEl && analysisData.entryPoints) {
+    entryPointsEl.textContent = analysisData.entryPoints.join(', ');
+    entryPointsEl.style.color = analysisData.direction === 'bullish' ? 'var(--success)' : 'var(--danger)';
+  }
+  
+  if (takeProfitLevelsEl && analysisData.takeProfitLevels) {
+    takeProfitLevelsEl.textContent = analysisData.takeProfitLevels.join(', ');
+    takeProfitLevelsEl.style.color = 'var(--success)';
+  }
+  
+  if (stopLossLevelsEl && analysisData.stopLossLevels) {
+    stopLossLevelsEl.textContent = analysisData.stopLossLevels.join(', ');
+    stopLossLevelsEl.style.color = 'var(--danger)';
+  }
+  
+  if (keyAreasEl && analysisData.keyLevels) {
+    const keyAreas = analysisData.keyLevels
+      .filter(level => level.significance === 'high')
+      .map(level => `${level.type} at ${level.price}`)
+      .join(', ');
+    keyAreasEl.textContent = keyAreas || 'None identified';
+  }
+  
+  // Update Detailed Analysis
+  const detailedAnalysisEl = document.getElementById('detailedAnalysis');
+  if (detailedAnalysisEl && analysisData.reasoning) {
+    // Create a styled analysis with direction indicator
+    const directionClass = analysisData.direction === 'bullish' ? 'bullish' : 
+                          (analysisData.direction === 'bearish' ? 'bearish' : 'neutral');
+    
+    detailedAnalysisEl.innerHTML = `
+      <h3>🧠 Market Analysis <span class="direction-badge ${directionClass}">${analysisData.direction.toUpperCase()}</span></h3>
+      <div class="analysis-content">
+        <p class="risk-reward">Risk/Reward Ratio: <strong>${analysisData.riskReward || 'N/A'}</strong></p>
+        <div class="reasoning">
+          ${formatAnalysisText(analysisData.reasoning)}
+        </div>
+      </div>
+    `;
+  }
+  
+  // Update last updated time
+  updateLastUpdated();
 }
 
-// Add CSS classes for the analysis results
+// Format analysis text with better styling
+function formatAnalysisText(text) {
+  if (!text) return '';
+  
+  // Replace line breaks with paragraphs
+  let formatted = text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+  
+  // Wrap in paragraph if not already
+  if (!formatted.startsWith('<p>')) {
+    formatted = '<p>' + formatted;
+  }
+  if (!formatted.endsWith('</p>')) {
+    formatted = formatted + '</p>';
+  }
+  
+  // Highlight key terms
+  const highlights = {
+    'bullish': 'bullish-text',
+    'bearish': 'bearish-text',
+    'support': 'support-text',
+    'resistance': 'resistance-text',
+    'buy': 'bullish-text',
+    'sell': 'bearish-text',
+    'entry': 'highlight-text',
+    'target': 'highlight-text',
+    'stop loss': 'danger-text',
+    'take profit': 'success-text'
+  };
+  
+  Object.entries(highlights).forEach(([term, className]) => {
+    const regex = new RegExp(`\\b${term}\\b`, 'gi');
+    formatted = formatted.replace(regex, `<span class="${className}">$&</span>`);
+  });
+  
+  return formatted;
+}
+
+// Show loading state for analysis
+function showAnalysisLoading(isLoading) {
+  const detailedAnalysisEl = document.getElementById('detailedAnalysis');
+  if (detailedAnalysisEl) {
+    if (isLoading) {
+      detailedAnalysisEl.innerHTML = `
+        <h3>🧠 Market Analysis</h3>
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Analyzing market conditions...</p>
+        </div>
+      `;
+    }
+  }
+}
+
+// Show error message for analysis
+function showAnalysisError(errorMessage) {
+  const detailedAnalysisEl = document.getElementById('detailedAnalysis');
+  if (detailedAnalysisEl) {
+    detailedAnalysisEl.innerHTML = `
+      <h3>🧠 Market Analysis</h3>
+      <div class="error-container">
+        <p>Error analyzing chart: ${errorMessage}</p>
+        <p>Please try again or check your API configuration.</p>
+      </div>
+    `;
+  }
+}
+
+// Add analysis styles
 function addAnalysisStyles() {
-  const style = document.createElement('style');
-  style.textContent = `
-    .support-text { color: var(--support); }
-    .resistance-text { color: var(--resistance); }
-    .fib-text { color: var(--fib); }
-    .high-significance { font-weight: bold; }
-    .error-text { color: var(--danger); }
-    .error-message { 
-      color: var(--danger); 
-      padding: 10px; 
-      background-color: rgba(214, 48, 49, 0.1); 
-      border-radius: 4px; 
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    .loading-spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 1s ease-in-out infinite;
+      margin: 0 auto;
     }
     
-    /* Trendict Button */
-    .trendict-button-container {
-      display: flex;
-      justify-content: center;
-      margin-top: 16px;
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     
-    .trendict-button {
-      background-color: var(--primary);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 6px 16px;
-      font-size: 14px;
-      font-weight: 500;
-      height: 36px;
-      width: 87.4px;
+    .loading-container {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    }
-    
-    .trendict-button:hover {
-      background-color: var(--primary-light);
-      transform: translateY(-1px);
-    }
-    
-    .trendict-button:active {
-      transform: translateY(0);
-    }
-    
-    /* Analysis Results */
-    .analysis-results {
-      background-color: var(--bg-secondary);
-      border-radius: var(--border-radius);
       padding: 20px;
-      margin-top: 16px;
-      box-shadow: var(--box-shadow);
+      gap: 10px;
     }
     
-    .analysis-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
+    .error-container {
+      background-color: rgba(214, 48, 49, 0.1);
+      border-left: 3px solid var(--danger);
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
     }
     
-    .analysis-header h3 {
-      margin: 0;
-      color: var(--primary-light);
-    }
-    
-    .analysis-timestamp {
+    .direction-badge {
       font-size: 12px;
-      color: var(--text-secondary);
+      padding: 3px 8px;
+      border-radius: 12px;
+      margin-left: 10px;
+      font-weight: 600;
     }
     
-    .analysis-tabs {
-      display: flex;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      margin-bottom: 16px;
+    .direction-badge.bullish {
+      background-color: var(--success);
+      color: white;
     }
     
-    .tab-button {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      padding: 8px 16px;
+    .direction-badge.bearish {
+      background-color: var(--danger);
+      color: white;
+    }
+    
+    .direction-badge.neutral {
+      background-color: var(--warning);
+      color: #333;
+    }
+    
+    .risk-reward {
       font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s;
-      border-bottom: 2px solid transparent;
+      margin-bottom: 15px;
+      padding: 8px 12px;
+      background-color: var(--bg-tertiary);
+      border-radius: 6px;
+      display: inline-block;
     }
     
-    .tab-button.active {
-      color: var(--primary-light);
-      border-bottom: 2px solid var(--primary-light);
-    }
-    
-    .tab-content {
-      display: none;
-    }
-    
-    .tab-content.active {
-      display: block;
-    }
-    
-    .analysis-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    
-    .analysis-table th, .analysis-table td {
-      padding: 10px;
-      text-align: left;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    .analysis-table th {
-      color: var(--text-secondary);
-      font-weight: 500;
-      width: 30%;
-    }
-    
-    .reasoning-content {
+    .reasoning {
       line-height: 1.6;
       font-size: 14px;
     }
     
-    /* Loading indicator */
-    .loading-indicator {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-            color: var(--text-secondary);
-      font-size: 14px;
-      margin: 20px 0;
-    }
-    
-    .loading-spinner {
-      width: 20px;
-      height: 20px;
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      border-top: 2px solid var(--primary);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
-    /* TradingView container */
-    #tradingview_chart_container {
-      width: 100%;
-      height: 70vh;
-      min-height: 500px;
-      border-radius: var(--border-radius);
-      overflow: hidden;
-      box-shadow: var(--box-shadow);
-    }
+    .bullish-text { color: var(--success); font-weight: 500; }
+    .bearish-text { color: var(--danger); font-weight: 500; }
+    .support-text { color: var(--support); font-weight: 500; }
+    .resistance-text { color: var(--resistance); font-weight: 500; }
+    .highlight-text { color: var(--primary-light); font-weight: 500; }
+    .danger-text { color: var(--danger); font-weight: 500; }
+    .success-text { color: var(--success); font-weight: 500; }
   `;
-  document.head.appendChild(style);
+  
+  document.head.appendChild(styleEl);
 }
