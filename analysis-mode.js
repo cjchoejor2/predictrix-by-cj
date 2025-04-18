@@ -20,14 +20,27 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Initialize the TradingView widget with saved drawings
+// Initialize the TradingView widget with saved drawings
 function initTradingViewWithSavedDrawings() {
+  // Make sure the container exists
   const container = document.getElementById('tradingview_chart_container');
   if (!container) {
     console.error('TradingView container not found');
     return;
   }
   
+  // Make sure TradingView library is loaded
+  if (typeof TradingView === 'undefined') {
+    console.error('TradingView library not loaded');
+    // Try to load it again or wait
+    setTimeout(initTradingViewWithSavedDrawings, 1000);
+    return;
+  }
+  
   // Get current symbol and interval from selectors
+  let currentSymbol = 'BTCUSDT';
+  let currentInterval = '15';
+  
   const symbolSelect = document.getElementById('chartSymbol');
   const intervalSelect = document.getElementById('chartInterval');
   
@@ -39,79 +52,71 @@ function initTradingViewWithSavedDrawings() {
   // Load saved drawings from localStorage
   const savedDrawings = localStorage.getItem(`tv-drawings-${currentSymbol}-${currentInterval}`);
   
-  // Create the TradingView widget
-  tvWidget = new TradingView.widget({
-    width: container.offsetWidth,
-    height: container.offsetHeight,
-    symbol: `OKEX:${currentSymbol}`, // Use current symbol
-    interval: currentInterval, // Use current interval
-    timezone: "Etc/UTC",
-    theme: "dark",
-    style: "1", // Candles
-    locale: "en",
-    toolbar_bg: "#1E1E2D",
-    enable_publishing: false,
-    withdateranges: true,
-    hide_side_toolbar: false,
-    allow_symbol_change: true,
-    save_image: true,
-    studies: [
-      "MASimple@tv-basicstudies",
-      "RSI@tv-basicstudies",
-      "MACD@tv-basicstudies",
-      "BB@tv-basicstudies"
-    ],
-    container_id: "advancedChart",
-    saved_data: savedDrawings ? JSON.parse(savedDrawings) : null,
-    drawings_access: {
-      type: 'fullaccess',
-      tools: [
-        { name: "Trend Line" },
-        { name: "Fibonacci Retracement" },
-        { name: "Fibonacci Fan" },
-        { name: "Fibonacci Time Zone" },
-        { name: "Rectangle" },
-        { name: "Ellipse" },
-        { name: "Path" },
-        { name: "Polyline" },
-        { name: "Text" }
-      ]
-    }
-  });
-  
-  // Save drawings when they change
-  tvWidget.onChartReady(() => {
-    // Save drawings when chart is modified
-    tvWidget.subscribe('onAutoSaveNeeded', () => {
-      tvWidget.save(chartData => {
-        localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+  try {
+    // Create the TradingView widget
+    tvWidget = new TradingView.widget({
+      container_id: "tradingview_chart_container", // Use the correct ID
+      width: "100%",
+      height: "600px",
+      symbol: `OKEX:${currentSymbol}`,
+      interval: currentInterval,
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1", // Candles
+      locale: "en",
+      toolbar_bg: "#1E1E2D",
+      enable_publishing: false,
+      withdateranges: true,
+      hide_side_toolbar: false,
+      allow_symbol_change: true,
+      save_image: true,
+      studies: [
+        "MASimple@tv-basicstudies",
+        "RSI@tv-basicstudies",
+        "MACD@tv-basicstudies",
+        "BB@tv-basicstudies"
+      ],
+      saved_data: savedDrawings ? JSON.parse(savedDrawings) : null,
+      drawings_access: {
+        type: 'fullaccess',
+        tools: [
+          { name: "Trend Line" },
+          { name: "Fibonacci Retracement" },
+          { name: "Fibonacci Fan" },
+          { name: "Fibonacci Time Zone" },
+          { name: "Rectangle" },
+          { name: "Ellipse" },
+          { name: "Path" },
+          { name: "Polyline" },
+          { name: "Text" }
+        ]
+      }
+    });
+    
+    // Save drawings when they change
+    tvWidget.onChartReady(() => {
+      console.log("TradingView chart is ready");
+      // Save drawings when chart is modified
+      tvWidget.subscribe('onAutoSaveNeeded', () => {
+        tvWidget.save(chartData => {
+          localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+        });
+      });
+      
+      // Also save when user manually adds a drawing
+      tvWidget.subscribe('onDrawingComplete', () => {
+        tvWidget.save(chartData => {
+          localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
+        });
       });
     });
     
-    // Also save when user manually adds a drawing
-    tvWidget.subscribe('onDrawingComplete', () => {
-      tvWidget.save(chartData => {
-        localStorage.setItem(`tv-drawings-${currentSymbol}-${currentInterval}`, JSON.stringify(chartData));
-      });
-    });
-  });
-  
-  // Make the widget responsive
-  window.addEventListener('resize', () => {
-    if (container) {
-      // Unfortunately, TradingView widget doesn't have a direct resize method
-      // The best approach is to recreate the widget on significant size changes
-      // For performance reasons, you might want to debounce this
-      if (Math.abs(container.offsetWidth - tvWidget.options.width) > 100 ||
-          Math.abs(container.offsetHeight - tvWidget.options.height) > 100) {
-        tvWidget.options.width = container.offsetWidth;
-        tvWidget.options.height = container.offsetHeight;
-        // Recreate widget only on significant size changes
-        initTradingViewWithSavedDrawings();
-      }
-    }
-  });
+    console.log("TradingView widget initialized");
+  } catch (error) {
+    console.error("Error initializing TradingView widget:", error);
+  }
 }
+
 
 // Set up event listeners
 function setupEventListeners() {
