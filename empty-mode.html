@@ -11,7 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
   <!-- TradingView Widget BEGIN -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-
+  <!-- html2canvas for screenshot capture -->
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 </head>
 <body class="full-screen">
   <div class="app-container">
@@ -45,30 +46,81 @@
     </header>
 
     <div class="analysis-container">
-        <!-- TradingView Chart Container -->
-        <div id="tradingview_chart_container" style="width: 100%; height: 600px;"></div>
+      <!-- TradingView Chart Container -->
+      <div id="tradingview_chart_container" style="width: 100%; height: 600px;"></div>
+      
+      <!-- Trendict Button -->
+      <div class="trendict-button-container">
+        <button id="trendictButton" class="trendict-button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Trendict
+        </button>
+      </div>
+      
+      <!-- Analysis Results -->
+      <div id="analysisResults" class="analysis-results">
+        <div class="analysis-header">
+          <h3>Trading Analysis</h3>
+          <span id="analysisTimestamp" class="analysis-timestamp">Click Trendict to analyze chart</span>
+        </div>
         
-        <!-- Analysis panels -->
-        <div class="analysis-panels">
-          <!-- Strategy panel -->
-          <div class="strategy-panel">
-            <h3>Trading Strategy</h3>
-            <div class="strategy-grid">
-              <div class="strategy-label">Entry Points:</div>
-              <div id="entryPoints" class="strategy-value">Use TradingView tools for analysis</div>
-              
-              <div class="strategy-label">Take Profit:</div>
-              <div id="takeProfitLevels" class="strategy-value">Set alerts directly on chart</div>
-              
-              <div class="strategy-label">Stop Loss:</div>
-              <div id="stopLossLevels" class="strategy-value">Use drawing tools on chart</div>
+        <div class="analysis-content">
+          <div class="analysis-tabs">
+            <button class="tab-button active" data-tab="tradingPlan">Trading Plan</button>
+            <button class="tab-button" data-tab="keyLevels">Key Levels</button>
+            <button class="tab-button" data-tab="reasoning">Reasoning</button>
+          </div>
+          
+          <div class="tab-content active" id="tradingPlan">
+            <table class="analysis-table">
+              <tr>
+                <th>Direction</th>
+                <td id="tradeDirection">-</td>
+              </tr>
+              <tr>
+                <th>Entry Points</th>
+                <td id="entryPoints">-</td>
+              </tr>
+              <tr>
+                <th>Take Profit</th>
+                <td id="takeProfitLevels">-</td>
+              </tr>
+              <tr>
+                <th>Stop Loss</th>
+                <td id="stopLossLevels">-</td>
+              </tr>
+              <tr>
+                <th>Risk/Reward</th>
+                <td id="riskReward">-</td>
+              </tr>
+            </table>
+          </div>
+          
+          <div class="tab-content" id="keyLevels">
+            <table class="analysis-table" id="keyLevelsTable">
+              <tr>
+                <th>Level Type</th>
+                <th>Price</th>
+                <th>Significance</th>
+              </tr>
+              <!-- Will be populated by JavaScript -->
+            </table>
+          </div>
+          
+          <div class="tab-content" id="reasoning">
+            <div id="analysisReasoning" class="reasoning-content">
+              Click the Trendict button to analyze the chart with your drawings.
             </div>
           </div>
         </div>
       </div>
-      
+    </div>
+  </div>
   
-  <script src="analysis-mode.js"></script>
+  <script type="module" src="analysis-mode.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

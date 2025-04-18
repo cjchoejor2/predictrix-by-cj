@@ -1201,3 +1201,175 @@ input:checked + .slider:before {
     flex-direction: column;
   }
 }
+
+/* Trendict Button */
+.trendict-button-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.trendict-button {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  height: 36px;
+  width: 87.4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.trendict-button:hover {
+  background-color: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+.trendict-button:active {
+  transform: translateY(0);
+}
+
+/* Analysis Results */
+.analysis-results {
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  margin-top: 16px;
+  box-shadow: var(--box-shadow);
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.analysis-header h3 {
+  margin: 0;
+  color: var(--primary-light);
+}
+
+.analysis-timestamp {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.analysis-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 16px;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-button.active {
+  color: var(--primary-light);
+  border-bottom: 2px solid var(--primary-light);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.analysis-table th, .analysis-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.analysis-table th {
+  color: var(--text-secondary);
+  font-weight: 500;
+  width: 30%;
+}
+
+.reasoning-content {
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* Loading indicator */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 20px 0;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* TradingView container */
+#tradingview_chart_container {
+  width: 100%;
+  height: 70vh;
+  min-height: 500px;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  box-shadow: var(--box-shadow);
+}
+
+/* Analysis container adjustments */
+.analysis-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  height: calc(100vh - 80px); /* Adjust based on your header height */
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Support, resistance and fib text colors */
+.support-text { color: var(--support); }
+.resistance-text { color: var(--resistance); }
+.fib-text { color: var(--fib); }
+.high-significance { font-weight: bold; }
+.error-text { color: var(--danger); }
+.error-message { 
+  color: var(--danger); 
+  padding: 10px; 
+  background-color: rgba(214, 48, 49, 0.1); 
+  border-radius: 4px; 
+}
