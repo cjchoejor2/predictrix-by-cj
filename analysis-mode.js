@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Initialize the TradingView widget with saved drawings
 function initTradingViewWithSavedDrawings() {
-  const container = document.getElementById('advancedChart');
+  const container = document.getElementById('tradingview_chart_container');
   if (!container) {
     console.error('TradingView container not found');
     return;
