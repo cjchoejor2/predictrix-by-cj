@@ -46,25 +46,48 @@
     </header>
 
     <div class="analysis-container">
-      <!-- TradingView Chart Container -->
-      <div id="tradingview_chart_container" style="width: 100%; height: 600px;"></div>
-      
-      <!-- Trendict Button -->
-      <div class="trendict-button-container">
-        <button id="trendictButton" class="trendict-button">
+      <!-- Chart Controls -->
+      <div class="chart-controls">
+        <div class="control-group">
+          <label for="chartSymbol">Trading Pair</label>
+          <select id="chartSymbol">
+            <option value="BTCUSDT" selected>BTC/USDT</option>
+            <option value="ETHUSDT">ETH/USDT</option>
+            <option value="SOLUSDT">SOL/USDT</option>
+            <option value="XRPUSDT">XRP/USDT</option>
+            <option value="PIUSDT">PI/USDT</option>
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label for="chartInterval">Timeframe</label>
+          <select id="chartInterval">
+            <option value="1">1 Minute</option>
+            <option value="5">5 Minutes</option>
+            <option value="15" selected>15 Minutes</option>
+            <option value="60">1 Hour</option>
+            <option value="240">4 Hours</option>
+            <option value="D">1 Day</option>
+          </select>
+        </div>
+        
+        <button id="analyzeChartBtn" class="analyze-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2"/>
             <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
-          Trendict
+          ANALYZE
         </button>
       </div>
+      
+      <!-- TradingView Chart Container -->
+      <div id="tradingview_chart_container" style="width: 100%; height: 600px;"></div>
       
       <!-- Analysis Results -->
       <div id="analysisResults" class="analysis-results">
         <div class="analysis-header">
           <h3>Trading Analysis</h3>
-          <span id="analysisTimestamp" class="analysis-timestamp">Click Trendict to analyze chart</span>
+          <span id="analysisTimestamp" class="analysis-timestamp">Click Analyze to analyze chart</span>
         </div>
         
         <div class="analysis-content">
@@ -111,8 +134,8 @@
           </div>
           
           <div class="tab-content" id="reasoning">
-            <div id="analysisReasoning" class="reasoning-content">
-              Click the Trendict button to analyze the chart with your drawings.
+            <div id="detailedAnalysis" class="reasoning-content">
+              Click the Analyze button to analyze the chart.
             </div>
           </div>
         </div>
@@ -121,6 +144,5 @@
   </div>
   
   <script type="module" src="analysis-mode.js"></script>
-  <script src="script.js"></script>
 </body>
 </html>
